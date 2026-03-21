@@ -16,13 +16,26 @@ This skill generates a professional, visually polished PDF report from GEO audit
 
 - **ReportLab** must be installed: `pip install reportlab`
 - The PDF generation script is located at: `~/.claude/skills/geo/scripts/generate_pdf_report.py`
-- Run a full GEO audit first (using `/geo-audit`) to have data to include in the report
+- Use `/geo strategy-report <url>` to generate the strategist report payload and PDF
 
 ## How to Generate a PDF Report
 
-### Step 1: Collect Audit Data
+For this repository, the preferred implementation is now a single orchestrator entrypoint instead of a manual chain of separate script calls.
 
-After running a full `/geo-audit`, collect all scores, findings, and recommendations into a JSON structure. The JSON data must follow this schema:
+### Preferred Command
+
+```bash
+python scripts/strategy_report.py <url>
+```
+
+This command:
+- runs the strategist workflow through the shared audit orchestrator
+- writes the combined markdown and JSON artifacts
+- prints the final JSON payload and generates the PDF automatically
+
+### Underlying JSON Shape
+
+The strategist wrapper generates a structured JSON payload that includes the audit data and report sections. Its shape is compatible with the PDF generator and follows this general schema:
 
 ```json
 {
@@ -72,9 +85,9 @@ After running a full `/geo-audit`, collect all scores, findings, and recommendat
 }
 ```
 
-### Step 2: Write JSON Data to a Temp File
+### Manual Fallback
 
-Write the collected audit data to a temporary JSON file:
+If the wrapper is unavailable and you need to render a PDF manually, write the collected audit data to a temporary JSON file:
 
 ```bash
 # Write audit data to temp file
@@ -83,7 +96,7 @@ cat > /tmp/geo-audit-data.json << 'EOF'
 EOF
 ```
 
-### Step 3: Generate the PDF
+### Manual PDF Rendering
 
 Run the PDF generation script:
 
@@ -101,47 +114,23 @@ The script will produce a professional PDF report with:
 - **Prioritized Action Plan** — Quick wins, medium-term, and strategic initiatives
 - **Appendix** — Methodology, data sources, and glossary
 
-### Step 4: Return the PDF Path
+### Return the PDF Path
 
 After generation, tell the user where the PDF was saved and its file size.
 
 ## Complete Workflow Example
 
-When the user runs this skill, follow this exact sequence:
+When the user runs `/geo strategy-report <url>` with a URL:
 
-1. **Check for existing audit data** — Look for recent GEO audit reports in the current directory:
-   - `GEO-CLIENT-REPORT.md`
-   - `GEO-AUDIT-REPORT.md`
-   - Or any `GEO-*.md` files from a recent audit
-
-2. **If no audit data exists** — Tell the user to run `/geo-audit <url>` first, then come back for the PDF.
-
-3. **If audit data exists** — Parse the markdown report to extract:
-   - Overall GEO score
-   - Category scores (citability, brand authority, content/E-E-A-T, technical, schema, platform)
-   - Platform readiness scores (Google AIO, ChatGPT, Perplexity, Gemini, Bing Copilot)
-   - AI crawler access status
-   - Key findings with severity levels
-   - Quick wins, medium-term, and strategic action items
-   - Executive summary
-
-4. **Build the JSON** — Structure all data into the JSON schema shown above.
-
-5. **Write JSON to temp file** — Save to `/tmp/geo-audit-data.json`
-
-6. **Run the PDF generator**:
-   ```bash
-   python3 ~/.claude/skills/geo/scripts/generate_pdf_report.py /tmp/geo-audit-data.json "GEO-REPORT-[brand_name].pdf"
-   ```
-
-7. **Report success** — Tell the user the PDF was generated, its location, and file size.
+1. Run the shared strategist wrapper with `python scripts/strategy_report.py <url>`
+2. The wrapper prints the JSON payload and generates the PDF automatically
+3. Generate the PDF as described above
 
 ## If the User Provides a URL
 
-If the user runs `/geo-report-pdf https://example.com` with a URL:
-1. First run a full audit: invoke the `geo-audit` skill for that URL
-2. Then collect all the audit data from the generated report files
-3. Generate the PDF as described above
+If the user runs `/geo strategy-report https://example.com` or invokes this skill with a URL:
+1. Run `python scripts/strategy_report.py <url>`
+2. Return the generated PDF path and any JSON path written by the orchestrator
 
 ## Parsing Markdown Audit Data
 

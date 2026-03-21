@@ -280,6 +280,14 @@ This is the most important section of the report. Organize actions by timeline a
 - Build topical authority through comprehensive content strategy
 - Establish original research/data publication program
 
+### Detailed Action Breakdowns
+For EVERY action listed in the prioritized plan above, you MUST provide a detailed breakdown formatted exactly like this:
+
+#### [Action Name]
+- **What it means (Executive Summary):** A simple explanation of the issue and action for the CEO and Marketing Manager. Explain the concept without technical jargon.
+- **Why it matters (Business Impact):** How this impacts AI referral traffic, brand perception, and specific business goals.
+- **How we fix it (Developer/Technical Action):** Clear, technical instructions for the developer to implement the fix. Include code snippets, schema shapes, or specific file paths if applicable.
+
 ### Estimated Impact
 After the action plan, include an impact estimate:
 

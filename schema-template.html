@@ -1,0 +1,75 @@
+<!-- Place this JSON-LD script inside the <head> tag of your homepage and primary service pages -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://www.transglobalus.com/#website",
+      "url": "https://www.transglobalus.com/",
+      "name": "TransGlobal Holding Company",
+      "description": "Comprehensive wealth management, insurance, and real estate services.",
+      "publisher": {
+        "@id": "https://www.transglobalus.com/#organization"
+      }
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://www.transglobalus.com/#organization",
+      "name": "TransGlobal Holding Company",
+      "url": "https://www.transglobalus.com/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://www.transglobalus.com/logo.png"
+      },
+      "sameAs": [
+        "https://www.facebook.com/TransGlobalUS",
+        "https://twitter.com/TransGlobalUS",
+        "https://www.linkedin.com/company/transglobalus",
+        "https://www.youtube.com/c/TransGlobalUS"
+      ]
+    },
+    {
+      "@type": "FinancialService",
+      "@id": "https://www.transglobalus.com/#financialservice",
+      "name": "TransGlobal Wealth Management & Insurance",
+      "url": "https://www.transglobalus.com/",
+      "parentOrganization": {
+        "@id": "https://www.transglobalus.com/#organization"
+      },
+      "areaServed": "US",
+      "description": "Family office services, estate planning, and comprehensive insurance solutions."
+    },
+    {
+      "@type": "RealEstateAgent",
+      "@id": "https://www.transglobalus.com/#realestate",
+      "name": "TransGlobal Real Estate Strategy",
+      "url": "https://www.transglobalus.com/",
+      "parentOrganization": {
+        "@id": "https://www.transglobalus.com/#organization"
+      },
+      "description": "Residential, commercial, and investment real estate services, brokered by eXp Realty."
+    }
+  ]
+}
+</script>
+
+<!-- Add this dynamically to specific Service Pages ONLY to trigger Perplexity visibility (+40%) -->
+<!--
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What services does TransGlobal currently offer?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Based on 2026 data, TransGlobal provides comprehensive family office services including wealth management, health and life insurance, and residential/commercial real estate brokerage."
+      }
+    }
+  ]
+}
+</script>
+-->

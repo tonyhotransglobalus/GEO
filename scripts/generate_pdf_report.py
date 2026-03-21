@@ -25,6 +25,8 @@ import sys
 import json
 import os
 from datetime import datetime
+from xml.sax.saxutils import escape
+from typing import Any, Mapping
 
 try:
     from reportlab.lib.pagesizes import letter, A4
@@ -46,6 +48,21 @@ try:
 except ImportError:
     print("ERROR: ReportLab is required. Run: pip install reportlab")
     sys.exit(1)
+
+try:
+    from .strategy_engine.reporting import (
+        EVIDENCE_APPENDIX_TITLE,
+        REPORT_SECTION_ORDER,
+        format_evidence_item_text,
+        normalize_report_sections,
+    )
+except ImportError:
+    from strategy_engine.reporting import (
+        EVIDENCE_APPENDIX_TITLE,
+        REPORT_SECTION_ORDER,
+        format_evidence_item_text,
+        normalize_report_sections,
+    )
 
 
 # ============================================================
@@ -297,6 +314,65 @@ def build_styles():
         alignment=TA_CENTER,
     ))
 
+    styles.add(ParagraphStyle(
+        name='TableHeaderCell',
+        fontName='Helvetica-Bold',
+        fontSize=8.5,
+        leading=10,
+        textColor=WHITE,
+        alignment=TA_LEFT,
+        spaceBefore=0,
+        spaceAfter=0,
+    ))
+
+    styles.add(ParagraphStyle(
+        name='TableCell',
+        fontName='Helvetica',
+        fontSize=8.75,
+        leading=11,
+        textColor=TEXT_PRIMARY,
+        alignment=TA_LEFT,
+        spaceBefore=0,
+        spaceAfter=0,
+    ))
+
+    styles.add(ParagraphStyle(
+        name='TableLabelCell',
+        parent=styles['TableCell'],
+        fontName='Helvetica-Bold',
+        textColor=ACCENT,
+    ))
+
+    styles.add(ParagraphStyle(
+        name='FindingTitle',
+        fontName='Helvetica-Bold',
+        fontSize=11,
+        leading=13,
+        textColor=TEXT_PRIMARY,
+        spaceBefore=0,
+        spaceAfter=4,
+    ))
+
+    styles.add(ParagraphStyle(
+        name='FindingSummary',
+        fontName='Helvetica',
+        fontSize=10,
+        leading=14,
+        textColor=TEXT_PRIMARY,
+        spaceBefore=0,
+        spaceAfter=6,
+    ))
+
+    styles.add(ParagraphStyle(
+        name='FindingDetail',
+        fontName='Helvetica',
+        fontSize=9.5,
+        leading=13,
+        textColor=TEXT_PRIMARY,
+        spaceBefore=0,
+        spaceAfter=4,
+    ))
+
     return styles
 
 
@@ -339,15 +415,450 @@ def make_table_style(header_color=PRIMARY):
         ('FONTSIZE', (0, 1), (-1, -1), 9),
         ('TEXTCOLOR', (0, 1), (-1, -1), TEXT_PRIMARY),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('GRID', (0, 0), (-1, -1), 0.5, lightgrey),
         ('BACKGROUND', (0, 1), (-1, -1), WHITE),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, LIGHT_BG]),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('WORDWRAP', (0, 0), (-1, -1), 'LTR'),
+        ('TOPPADDING', (0, 0), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+        ('LEFTPADDING', (0, 0), (-1, -1), 7),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 7),
     ])
+
+
+def normalize_text(value):
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def paragraph_text(value):
+    return escape(normalize_text(value)).replace("\n", "<br/>")
+
+
+def make_label_value_paragraph(label, value, style):
+    return Paragraph(f"<b>{escape(label)}:</b> {paragraph_text(value)}", style)
+
+
+def wrap_table_rows(rows, styles=None, header_rows=1):
+    if styles is None:
+        styles = build_styles()
+
+    wrapped_rows = []
+    for row_index, row in enumerate(rows):
+        wrapped_row = []
+        for cell in row:
+            if isinstance(cell, Paragraph):
+                wrapped_row.append(cell)
+                continue
+            style_name = 'TableHeaderCell' if row_index < header_rows else 'TableCell'
+            wrapped_row.append(Paragraph(paragraph_text(cell), styles[style_name]))
+        wrapped_rows.append(wrapped_row)
+    return wrapped_rows
+
+
+def _report_item_text(item: Any) -> str:
+    if isinstance(item, Mapping):
+        if any(key in item for key in ("source_type", "source_tag", "metadata", "url")):
+            return format_evidence_item_text(item)
+        for key in ("name", "action", "label", "query", "issue", "competitor", "title", "service_line", "gap_theme"):
+            value = item.get(key)
+            if value:
+                text = str(value).strip()
+                if text:
+                    details = []
+                    for detail_key in (
+                        "owner",
+                        "impact",
+                        "severity",
+                        "failure_mode",
+                        "why_it_matters",
+                        "priority",
+                        "opportunity_score",
+                        "visibility",
+                        "citation_readiness",
+                        "citation_strength",
+                        "earned_media_strength",
+                        "technical_readiness",
+                    ):
+                        detail_value = item.get(detail_key)
+                        if detail_value:
+                            if isinstance(detail_value, list):
+                                detail_value = ", ".join(str(value).strip() for value in detail_value if value)
+                            details.append(f"{detail_key.replace('_', ' ').title()}: {detail_value}")
+                    if details:
+                        return f"{text} ({'; '.join(details)})"
+                    return text
+        return str(item)
+    if isinstance(item, list):
+        return ", ".join(_report_item_text(value) for value in item if value)
+    return str(item).strip()
+
+
+def _append_bullets(elements, items, styles, style_name="Recommendation"):
+    for index, item in enumerate(items, 1):
+        text = _report_item_text(item)
+        if text:
+            elements.append(Paragraph(f"<b>{index}.</b> {paragraph_text(text)}", styles[style_name]))
+
+
+def _fit_widths(widths, available_width):
+    total_width = sum(widths)
+    if total_width <= available_width:
+        return list(widths)
+
+    scale = available_width / float(total_width)
+    fitted = [max(1, int(width * scale)) for width in widths]
+    fitted[-1] += available_width - sum(fitted)
+    return fitted
+
+
+def render_report_sections(elements, report_sections, styles, content_width):
+    if not isinstance(report_sections, Mapping):
+        return
+
+    def add_heading(text, level="section"):
+        style = styles["SectionHeader"] if level == "section" else styles["SubHeader"]
+        elements.append(Paragraph(text, style))
+        elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=12))
+
+    for key in REPORT_SECTION_ORDER:
+        section = report_sections.get(key)
+        if not isinstance(section, Mapping):
+            continue
+
+        if key == "decision_summary":
+            add_heading("Decision Summary")
+            overview = section.get("overview")
+            if overview:
+                elements.append(Paragraph(paragraph_text(overview), styles["BodyText_Custom"]))
+                elements.append(Spacer(1, 8))
+            for title, items in (
+                ("Top Blockers", section.get("blockers") or []),
+                ("Top Opportunities", section.get("opportunities") or []),
+                ("Service Lines In Scope", section.get("service_lines") or []),
+                ("Next 30 Days", section.get("next_actions") or []),
+            ):
+                if items:
+                    elements.append(Paragraph(title, styles["SubHeader"]))
+                    _append_bullets(elements, items, styles)
+                    elements.append(Spacer(1, 6))
+            continue
+
+        if key == "service_line_scorecard":
+            add_heading("Service-Line Scorecard")
+            rows = section.get("rows") or []
+            if rows:
+                table_rows = [[
+                    "Service Line",
+                    "Visibility",
+                    "Citation Readiness",
+                    "Citation Strength",
+                    "Earned-Media",
+                    "Technical",
+                    "Priority",
+                ]]
+                for row in rows:
+                    if not isinstance(row, Mapping):
+                        continue
+                    table_rows.append([
+                        row.get("service_line", ""),
+                        row.get("visibility", ""),
+                        row.get("citation_readiness", ""),
+                        row.get("citation_strength", ""),
+                        row.get("earned_media_strength", ""),
+                        row.get("technical_readiness", ""),
+                        row.get("priority", ""),
+                    ])
+                table = build_wrapped_table(
+                    table_rows,
+                    _fit_widths([120, 62, 72, 70, 68, 60, 48], content_width),
+                    styles,
+                )
+                elements.append(table)
+                elements.append(Spacer(1, 8))
+                elements.append(Paragraph("Observed Queries", styles["SubHeader"]))
+                observed_lines = []
+                for row in rows:
+                    if isinstance(row, Mapping) and row.get("observed_queries"):
+                        observed_lines.append(
+                            f"{row.get('service_line', '')}: {', '.join(row.get('observed_queries') or [])}"
+                        )
+                _append_bullets(elements, observed_lines, styles)
+                elements.append(Spacer(1, 6))
+            continue
+
+        if key == "query_universe":
+            add_heading("Query Universe")
+            service_lines = section.get("service_lines") or []
+            if service_lines:
+                elements.append(Paragraph("Service-Line Query Themes", styles["SubHeader"]))
+                _append_bullets(elements, service_lines, styles)
+                elements.append(Spacer(1, 6))
+            clusters = section.get("clusters") or []
+            if clusters:
+                elements.append(Paragraph("Cluster Inventory", styles["SubHeader"]))
+                _append_bullets(elements, clusters, styles)
+                elements.append(Spacer(1, 6))
+            continue
+
+        if key == "competitor_visibility":
+            add_heading("Competitor Visibility")
+            summary = section.get("summary") or {}
+            discovery_note = summary.get("discovery_note")
+            if discovery_note:
+                elements.append(Paragraph(paragraph_text(discovery_note), styles["BodyText_Custom"]))
+                elements.append(Spacer(1, 6))
+            competitors = section.get("competitors") or []
+            if competitors:
+                elements.append(Paragraph("Observed Competitors", styles["SubHeader"]))
+                _append_bullets(elements, competitors, styles)
+                elements.append(Spacer(1, 6))
+            source_inventory = section.get("source_inventory") or {}
+            if isinstance(source_inventory, Mapping):
+                inventory_rows = [["Source Bucket", "Domains"]]
+                inventory_rows.append(["Site-owned", ", ".join(source_inventory.get("site_owned") or []) or "none discovered"])
+                inventory_rows.append(["Competitor-owned", ", ".join(source_inventory.get("competitor_owned") or []) or "none discovered"])
+                inventory_rows.append(["Earned-media", ", ".join(source_inventory.get("earned_media") or []) or "none discovered"])
+                table = build_wrapped_table(
+                    inventory_rows,
+                    _fit_widths([120, 380], content_width),
+                    styles,
+                )
+                elements.append(table)
+                elements.append(Spacer(1, 8))
+            authority_gaps = section.get("authority_gaps") or []
+            if authority_gaps:
+                elements.append(Paragraph("Visibility Gaps", styles["SubHeader"]))
+                _append_bullets(elements, authority_gaps, styles)
+                elements.append(Spacer(1, 6))
+            continue
+
+        if key == "earned_media_gap":
+            add_heading("Earned-Media Gap")
+            summary_note = section.get("summary_note")
+            if summary_note:
+                elements.append(Paragraph(paragraph_text(summary_note), styles["BodyText_Custom"]))
+                elements.append(Spacer(1, 6))
+            sources = section.get("sources") or []
+            if sources:
+                elements.append(Paragraph("Observed Sources", styles["SubHeader"]))
+                _append_bullets(elements, sources, styles)
+                elements.append(Spacer(1, 6))
+            gap_priorities = section.get("gap_priorities") or []
+            if gap_priorities:
+                elements.append(Paragraph("Gap Priorities", styles["SubHeader"]))
+                _append_bullets(elements, gap_priorities, styles)
+                elements.append(Spacer(1, 6))
+            continue
+
+        if key == "citation_diagnosis":
+            add_heading("Citation Diagnosis")
+            failures = section.get("failures") or []
+            if failures:
+                elements.append(Paragraph("Failure Items", styles["SubHeader"]))
+                _append_bullets(elements, failures, styles)
+                elements.append(Spacer(1, 6))
+            failure_modes = section.get("failure_modes") or []
+            if failure_modes:
+                elements.append(Paragraph("Failure Modes", styles["SubHeader"]))
+                _append_bullets(elements, [str(mode).replace("_", " ").title() for mode in failure_modes], styles)
+                elements.append(Spacer(1, 6))
+            citation_strength = section.get("citation_strength") or {}
+            if isinstance(citation_strength, Mapping):
+                elements.append(Paragraph("Citation Strength", styles["SubHeader"]))
+                for bucket_key, bucket_label in (("owned_sources", "Owned Sources"), ("earned_sources", "Earned Sources")):
+                    bucket = citation_strength.get(bucket_key) or {}
+                    if not isinstance(bucket, Mapping):
+                        continue
+                    lines = [
+                        f"Score: {bucket.get('score', 0)}/100",
+                        f"Label: {bucket.get('label', '')}",
+                    ]
+                    elements.append(Paragraph(bucket_label, styles["FindingTitle"]))
+                    elements.append(Paragraph(paragraph_text(" | ".join(lines)), styles["BodyText_Custom"]))
+                    dimensions = bucket.get("dimensions") or {}
+                    if isinstance(dimensions, Mapping):
+                        dimension_lines = []
+                        for dimension_key, dimension_value in dimensions.items():
+                            if isinstance(dimension_value, Mapping):
+                                dimension_lines.append(
+                                    f"{str(dimension_key).replace('_', ' ').title()}: "
+                                    f"{dimension_value.get('label', '')} ({dimension_value.get('score', 0)}/100)"
+                                )
+                        _append_bullets(elements, dimension_lines, styles)
+                    notes = bucket.get("notes") or []
+                    if notes:
+                        _append_bullets(elements, notes, styles)
+                    elements.append(Spacer(1, 6))
+            summary = (section.get("summary") or {}).get("diagnosis")
+            if summary:
+                elements.append(Paragraph(paragraph_text(summary), styles["BodyText_Custom"]))
+                elements.append(Spacer(1, 6))
+            continue
+
+        if key == "entity_trust_graph":
+            add_heading("Entity and Trust Graph")
+            entity_graph = section.get("entity_graph") or {}
+            if isinstance(entity_graph, Mapping):
+                lines = [
+                    f"Entity: {entity_graph.get('entity_name', '')}",
+                    f"Confidence: {entity_graph.get('confidence', '')}",
+                ]
+                elements.append(Paragraph(paragraph_text(" | ".join(lines)), styles["BodyText_Custom"]))
+                elements.append(Spacer(1, 6))
+            trust_signals = section.get("trust_signals") or []
+            if trust_signals:
+                elements.append(Paragraph("Trust Signals", styles["SubHeader"]))
+                _append_bullets(elements, trust_signals, styles)
+                elements.append(Spacer(1, 6))
+            profile_links = section.get("profile_links") or []
+            if profile_links:
+                elements.append(Paragraph("Profile Links", styles["SubHeader"]))
+                _append_bullets(elements, profile_links, styles)
+                elements.append(Spacer(1, 6))
+            continue
+
+        if key == "technical_geo_gates":
+            add_heading("Technical GEO Gates")
+            summary = section.get("summary") or {}
+            if isinstance(summary, Mapping):
+                elements.append(Paragraph(
+                    paragraph_text(f"GEO Score: {summary.get('geo_score', 0)}/100"),
+                    styles["BodyText_Custom"],
+                ))
+                elements.append(Spacer(1, 6))
+            gates = section.get("priority_gates") or []
+            if gates:
+                elements.append(Paragraph("Priority Gates", styles["SubHeader"]))
+                _append_bullets(elements, gates, styles)
+                elements.append(Spacer(1, 6))
+            crawler_access = section.get("crawler_access") or {}
+            if isinstance(crawler_access, Mapping) and crawler_access:
+                rows = [["Crawler", "Platform", "Status", "Recommendation"]]
+                for crawler_name, info in crawler_access.items():
+                    if isinstance(info, Mapping):
+                        rows.append([
+                            crawler_name,
+                            info.get("platform", ""),
+                            info.get("status", ""),
+                            info.get("recommendation", ""),
+                        ])
+                if len(rows) > 1:
+                    table = build_wrapped_table(
+                        rows,
+                        _fit_widths([82, 96, 88, 214], content_width),
+                        styles,
+                    )
+                    elements.append(table)
+                    elements.append(Spacer(1, 6))
+            continue
+
+        if key == "execution_ledger":
+            add_heading("30/60/90 Execution Ledger")
+            for label, items in (
+                ("30 Days", section.get("thirty_day") or []),
+                ("60 Days", section.get("sixty_day") or []),
+                ("90 Days", section.get("ninety_day") or []),
+            ):
+                elements.append(Paragraph(label, styles["SubHeader"]))
+                _append_bullets(elements, items, styles)
+                elements.append(Spacer(1, 4))
+            continue
+
+        if key == "developer_appendix":
+            add_heading("Developer Appendix")
+            technical_actions = section.get("technical_actions") or []
+            if technical_actions:
+                _append_bullets(elements, technical_actions, styles)
+                elements.append(Spacer(1, 6))
+            notes = section.get("implementation_notes") or []
+            if notes:
+                elements.append(Paragraph("Implementation Notes", styles["SubHeader"]))
+                _append_bullets(elements, notes, styles)
+                elements.append(Spacer(1, 6))
+            continue
+
+        if key == "evidence_appendix":
+            add_heading(EVIDENCE_APPENDIX_TITLE)
+            methodology = section.get("methodology") or []
+            if methodology:
+                elements.append(Paragraph("Methodology", styles["SubHeader"]))
+                _append_bullets(elements, methodology, styles)
+                elements.append(Spacer(1, 6))
+            evidence_items = section.get("evidence_items") or []
+            if evidence_items:
+                elements.append(Paragraph("Evidence Items", styles["SubHeader"]))
+                _append_bullets(elements, evidence_items, styles)
+                elements.append(Spacer(1, 6))
+
+
+def build_wrapped_table(rows, col_widths, styles, header_rows=1, header_color=PRIMARY):
+    table = Table(
+        wrap_table_rows(rows, styles=styles, header_rows=header_rows),
+        colWidths=col_widths,
+        repeatRows=header_rows,
+        splitByRow=1,
+        hAlign='LEFT',
+    )
+    table.setStyle(make_table_style(header_color))
+    return table
+
+
+def build_finding_card(finding, styles, width):
+    severity = finding.get("severity", "info").upper()
+    title = paragraph_text(finding.get("title", ""))
+    summary = finding.get("summary") or finding.get("description", "")
+
+    if severity == "CRITICAL":
+        severity_color = DANGER
+    elif severity == "HIGH":
+        severity_color = WARNING
+    elif severity == "MEDIUM":
+        severity_color = INFO
+    else:
+        severity_color = TEXT_SECONDARY
+
+    content = [
+        Paragraph(
+            f'<font color="{severity_color.hexval()}">[{severity}]</font> <b>{title}</b>',
+            styles['FindingTitle'],
+        ),
+        Paragraph(paragraph_text(summary), styles['FindingSummary']),
+        make_label_value_paragraph(
+            "Why this matters to leadership",
+            finding.get("leadership_impact", "Not provided."),
+            styles['FindingDetail'],
+        ),
+        make_label_value_paragraph(
+            "What marketing should do",
+            finding.get("marketing_action", "Not provided."),
+            styles['FindingDetail'],
+        ),
+        make_label_value_paragraph(
+            "What dev should change",
+            finding.get("developer_action", "Not provided."),
+            styles['FindingDetail'],
+        ),
+        make_label_value_paragraph(
+            "Observed evidence",
+            finding.get("observed_evidence", "Not provided."),
+            styles['FindingDetail'],
+        ),
+    ]
+
+    card = Table([[content]], colWidths=[width], splitByRow=1, hAlign='LEFT')
+    card.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), LIGHT_BG),
+        ('BOX', (0, 0), (-1, -1), 0.75, lightgrey),
+        ('LINEBEFORE', (0, 0), (0, 0), 4, severity_color),
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ('LEFTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+    ]))
+    return card
 
 
 def generate_report(data, output_path="GEO-REPORT.pdf"):
@@ -364,6 +875,7 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
 
     styles = build_styles()
     elements = []
+    content_width = doc.width
 
     # Extract data with defaults
     url = data.get("url", "https://example.com")
@@ -387,30 +899,39 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
         "Bing Copilot": 0,
     })
 
-    crawlers = data.get("crawlers", [])
     findings = data.get("findings", [])
     quick_wins = data.get("quick_wins", [])
     medium_term = data.get("medium_term", [])
     strategic = data.get("strategic", [])
     executive_summary = data.get("executive_summary", "")
-    crawler_access = data.get("crawler_access", {})
-    schema_findings = data.get("schema_findings", {})
-    content_findings = data.get("content_findings", {})
-    technical_findings = data.get("technical_findings", {})
-    brand_findings = data.get("brand_findings", {})
+    rescience_pass = data.get("rescience_pass", {})
+    report_sections = normalize_report_sections(data.get("report_sections"))
+    if not report_sections and data.get("crawler_access"):
+        report_sections = {
+            "technical_geo_gates": {
+                "summary": {"geo_score": geo_score, "platforms": platforms},
+                "priority_gates": [],
+                "crawler_access": data.get("crawler_access", {}),
+            }
+        }
+    decision_summary = (
+        report_sections.get("decision_summary")
+        if isinstance(report_sections, Mapping)
+        else {}
+    )
 
     # ============================================================
     # COVER PAGE
     # ============================================================
-    elements.append(Spacer(1, 100))
+    elements.append(Spacer(1, 48))
 
     # Title
-    elements.append(Paragraph("GEO Analysis Report", styles['ReportTitle']))
+    elements.append(Paragraph("GEO Strategist Workbook", styles['ReportTitle']))
     elements.append(Spacer(1, 8))
 
     # Subtitle
     elements.append(Paragraph(
-        f"Generative Engine Optimization Audit for <b>{brand_name}</b>",
+        f"Internal GEO/SEO operating report for <b>{brand_name}</b>",
         styles['ReportSubtitle']
     ))
 
@@ -418,186 +939,55 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
 
     # Key details table
     details_data = [
-        ["Website", url],
-        ["Analysis Date", datetime.strptime(date, "%Y-%m-%d").strftime("%B %d, %Y") if "-" in date else date],
-        ["GEO Score", f"{geo_score}/100 — {get_score_label(geo_score)}"],
+        [
+            Paragraph(paragraph_text("Website"), styles['TableLabelCell']),
+            Paragraph(paragraph_text(url), styles['TableCell']),
+        ],
+        [
+            Paragraph(paragraph_text("Analysis Date"), styles['TableLabelCell']),
+            Paragraph(
+                paragraph_text(datetime.strptime(date, "%Y-%m-%d").strftime("%B %d, %Y") if "-" in date else date),
+                styles['TableCell'],
+            ),
+        ],
+        [
+            Paragraph(paragraph_text("Readiness Snapshot"), styles['TableLabelCell']),
+            Paragraph(paragraph_text(
+                f"GEO {geo_score}/100 | AI Citability {ai_citability}/100 | "
+                f"Technical {technical}/100 | Schema {schema_score}/100"
+            ), styles['TableCell']),
+        ],
     ]
 
-    details_table = Table(details_data, colWidths=[120, 350])
+    details_table = Table(details_data, colWidths=[112, 368], hAlign='LEFT')
     details_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 11),
-        ('TEXTCOLOR', (0, 0), (0, -1), ACCENT),
-        ('TEXTCOLOR', (1, 0), (1, -1), TEXT_PRIMARY),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
         ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ('LINEBELOW', (0, 0), (-1, -2), 0.5, lightgrey),
     ]))
     elements.append(details_table)
 
-    elements.append(Spacer(1, 30))
+    overview = ""
+    if isinstance(decision_summary, Mapping):
+        overview = decision_summary.get("overview", "")
+    if not overview:
+        overview = executive_summary
+    if overview:
+        elements.append(Spacer(1, 18))
+        elements.append(Paragraph("Decision Summary", styles["SectionHeader"]))
+        elements.append(Paragraph(paragraph_text(overview), styles["BodyText_Custom"]))
+        elements.append(Spacer(1, 8))
 
-    # Score gauge
-    gauge = create_score_gauge(geo_score, 200, 200)
-    elements.append(gauge)
-
-    elements.append(Spacer(1, 20))
-
-    # Score label
-    score_color = get_score_color(geo_score)
-    elements.append(Paragraph(
-        f'<font color="{score_color.hexval()}">{get_score_label(geo_score)}</font>',
-        ParagraphStyle('ScoreLabelColored', parent=styles['SectionHeader'],
-                       alignment=TA_CENTER, fontSize=20)
-    ))
+    if isinstance(decision_summary, Mapping):
+        pass
 
     elements.append(PageBreak())
-
-    # ============================================================
-    # EXECUTIVE SUMMARY
-    # ============================================================
-    elements.append(Paragraph("Executive Summary", styles['SectionHeader']))
-    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=12))
-
-    if executive_summary:
-        elements.append(Paragraph(executive_summary, styles['BodyText_Custom']))
-    else:
-        elements.append(Paragraph(
-            f"This report presents the findings of a comprehensive Generative Engine Optimization (GEO) "
-            f"audit conducted on <b>{brand_name}</b> ({url}). The analysis evaluated the website's readiness "
-            f"for AI-powered search engines including Google AI Overviews, ChatGPT, Perplexity, Gemini, "
-            f"and Bing Copilot. The overall GEO Readiness Score is <b>{geo_score}/100</b>, "
-            f"placing the site in the <b>{get_score_label(geo_score)}</b> tier.",
-            styles['BodyText_Custom']
-        ))
-
-    elements.append(Spacer(1, 16))
-
-    # ============================================================
-    # SCORE BREAKDOWN
-    # ============================================================
-    elements.append(Paragraph("GEO Score Breakdown", styles['SectionHeader']))
-    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=12))
-
-    score_data = [
-        ["Component", "Score", "Weight", "Weighted"],
-        ["AI Citability & Visibility", f"{ai_citability}/100", "25%", f"{round(ai_citability * 0.25, 1)}"],
-        ["Brand Authority Signals", f"{brand_authority}/100", "20%", f"{round(brand_authority * 0.20, 1)}"],
-        ["Content Quality & E-E-A-T", f"{content_eeat}/100", "20%", f"{round(content_eeat * 0.20, 1)}"],
-        ["Technical Foundations", f"{technical}/100", "15%", f"{round(technical * 0.15, 1)}"],
-        ["Structured Data", f"{schema_score}/100", "10%", f"{round(schema_score * 0.10, 1)}"],
-        ["Platform Optimization", f"{platform_optimization}/100", "10%", f"{round(platform_optimization * 0.10, 1)}"],
-        ["OVERALL", f"{geo_score}/100", "100%", f"{geo_score}"],
-    ]
-
-    score_table = Table(score_data, colWidths=[200, 80, 60, 80])
-    style = make_table_style()
-
-    # Bold the last row
-    style.add('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold')
-    style.add('BACKGROUND', (0, -1), (-1, -1), MEDIUM_BG)
-
-    # Color-code score cells
-    for i in range(1, len(score_data) - 1):
-        score_val = int(score_data[i][1].split("/")[0])
-        color = get_score_color(score_val)
-        style.add('TEXTCOLOR', (1, i), (1, i), color)
-
-    score_table.setStyle(style)
-    elements.append(score_table)
-
-    elements.append(Spacer(1, 16))
-
-    # Score bar chart
-    chart_scores = [ai_citability, brand_authority, content_eeat, technical, schema_score, platform_optimization]
-    chart_labels = ["Citability", "Brand", "Content", "Technical", "Schema", "Platform"]
-    elements.append(create_bar_chart(chart_scores, chart_labels))
-
-    elements.append(PageBreak())
-
-    # ============================================================
-    # AI PLATFORM READINESS
-    # ============================================================
-    elements.append(Paragraph("AI Platform Readiness", styles['SectionHeader']))
-    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=12))
-
-    elements.append(Paragraph(
-        "These scores reflect how likely your content is to be cited by each AI search platform. "
-        "A score below 50 indicates significant barriers to citation on that platform.",
-        styles['BodyText_Custom']
-    ))
-    elements.append(Spacer(1, 10))
-
-    # Platform chart
-    if platforms:
-        elements.append(create_platform_chart(platforms))
-
-    elements.append(Spacer(1, 10))
-
-    # Platform table
-    platform_table_data = [["AI Platform", "Score", "Status"]]
-    for name, score in platforms.items():
-        status = get_score_label(score)
-        platform_table_data.append([name, f"{score}/100", status])
-
-    pt = Table(platform_table_data, colWidths=[180, 80, 150])
-    pt_style = make_table_style()
-    for i in range(1, len(platform_table_data)):
-        score_val = int(platform_table_data[i][1].split("/")[0])
-        color = get_score_color(score_val)
-        pt_style.add('TEXTCOLOR', (1, i), (1, i), color)
-    pt.setStyle(pt_style)
-    elements.append(pt)
-
-    elements.append(PageBreak())
-
-    # ============================================================
-    # AI CRAWLER ACCESS
-    # ============================================================
-    elements.append(Paragraph("AI Crawler Access Status", styles['SectionHeader']))
-    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=12))
-
-    elements.append(Paragraph(
-        "Blocking AI crawlers prevents AI platforms from citing your content. "
-        "The table below shows which AI crawlers can currently access your site.",
-        styles['BodyText_Custom']
-    ))
-    elements.append(Spacer(1, 8))
-
-    if crawler_access:
-        crawler_data = [["Crawler", "Platform", "Status", "Recommendation"]]
-        for crawler_name, info in crawler_access.items():
-            if isinstance(info, dict):
-                crawler_data.append([
-                    crawler_name,
-                    info.get("platform", ""),
-                    info.get("status", "Unknown"),
-                    info.get("recommendation", ""),
-                ])
-            else:
-                crawler_data.append([crawler_name, "", str(info), ""])
-
-        ct = Table(crawler_data, colWidths=[100, 100, 80, 180])
-        ct_style = make_table_style()
-
-        # Color status cells
-        for i in range(1, len(crawler_data)):
-            status = crawler_data[i][2].upper()
-            if "ALLOW" in status:
-                ct_style.add('TEXTCOLOR', (2, i), (2, i), SUCCESS)
-            elif "BLOCK" in status:
-                ct_style.add('TEXTCOLOR', (2, i), (2, i), DANGER)
-
-        ct.setStyle(ct_style)
-        elements.append(ct)
-    else:
-        elements.append(Paragraph(
-            "<i>Run /geo crawlers to populate this section with AI crawler access data.</i>",
-            styles['BodyText_Custom']
-        ))
-
-    elements.append(PageBreak())
+    if isinstance(report_sections, Mapping):
+        render_report_sections(elements, report_sections, styles, content_width)
+        elements.append(PageBreak())
 
     # ============================================================
     # KEY FINDINGS
@@ -607,26 +997,8 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
 
     if findings:
         for finding in findings:
-            severity = finding.get("severity", "info").upper()
-            title = finding.get("title", "")
-            description = finding.get("description", "")
-
-            if severity == "CRITICAL":
-                sev_color = DANGER
-            elif severity == "HIGH":
-                sev_color = WARNING
-            elif severity == "MEDIUM":
-                sev_color = INFO
-            else:
-                sev_color = TEXT_SECONDARY
-
-            elements.append(Paragraph(
-                f'<font color="{sev_color.hexval()}">[{severity}]</font> <b>{title}</b>',
-                styles['BodyText_Custom']
-            ))
-            if description:
-                elements.append(Paragraph(description, styles['Recommendation']))
-            elements.append(Spacer(1, 4))
+            elements.append(build_finding_card(finding, styles, content_width))
+            elements.append(Spacer(1, 10))
     else:
         elements.append(Paragraph(
             "<i>Run a full /geo audit to populate findings.</i>",
@@ -720,7 +1092,54 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
         for i, action in enumerate(default_strategic, 1):
             elements.append(Paragraph(f"<b>{i}.</b> {action}", styles['Recommendation']))
 
-    elements.append(PageBreak())
+    if rescience_pass:
+        elements.append(PageBreak())
+
+        elements.append(Paragraph("ReScience Optimization Pass", styles['SectionHeader']))
+        elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=12))
+
+        summary = rescience_pass.get("summary", "")
+        if summary:
+            elements.append(Paragraph(summary, styles['BodyText_Custom']))
+            elements.append(Spacer(1, 10))
+
+        priority_actions = rescience_pass.get("priority_actions", {})
+        for label in ("P0", "P1", "P2"):
+            elements.append(Paragraph(f"{label} Priorities", styles['SubHeader']))
+            items = priority_actions.get(label, [])
+            if items:
+                for item in items:
+                    elements.append(Paragraph(f"- {item}", styles['Recommendation']))
+            else:
+                elements.append(Paragraph("- None identified.", styles['Recommendation']))
+            elements.append(Spacer(1, 6))
+
+        platform_guidance = rescience_pass.get("platform_guidance", {})
+        if platform_guidance:
+            elements.append(Paragraph("Platform Guidance", styles['SubHeader']))
+            for platform_name, items in platform_guidance.items():
+                elements.append(Paragraph(platform_name, styles['BodyText_Custom']))
+                for item in items:
+                    elements.append(Paragraph(f"- {item}", styles['Recommendation']))
+                elements.append(Spacer(1, 4))
+
+        geo_methods = rescience_pass.get("geo_methods", [])
+        if geo_methods:
+            elements.append(Paragraph("Recommended GEO Methods", styles['SubHeader']))
+            for method in geo_methods:
+                text = (
+                    f"<b>{method.get('method', '')}</b> "
+                    f"({method.get('impact', '')})"
+                )
+                recommendation = method.get("recommendation", "")
+                if recommendation:
+                    text += f": {recommendation}"
+                elements.append(Paragraph(text, styles['Recommendation']))
+
+    if rescience_pass:
+        elements.append(Spacer(1, 12))
+    else:
+        elements.append(PageBreak())
 
     # ============================================================
     # METHODOLOGY & GLOSSARY
@@ -770,7 +1189,11 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
         ["IndexNow", "Protocol for instantly notifying search engines of content changes"],
     ]
 
-    gt = Table(glossary, colWidths=[80, 380])
+    gt = build_wrapped_table(
+        glossary,
+        col_widths=[90, 390],
+        styles=styles,
+    )
     gt.setStyle(make_table_style())
     elements.append(gt)
 

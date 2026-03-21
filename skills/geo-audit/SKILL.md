@@ -223,18 +223,22 @@ Generate a file called `GEO-AUDIT-REPORT.md` with the following structure:
 ## Critical Issues (Fix Immediately)
 
 [List each critical issue with specific page URLs and recommended fix]
+For each critical issue, provide:
+- **What it means (Executive Summary):** A simple explanation of the issue for the CEO and Marketing Manager.
+- **Why it matters (Business Impact):** How this impacts AI referral traffic and business goals.
+- **How we fix it (Developer/Technical Action):** Clear, technical instructions for the developer to implement the fix.
 
 ## High Priority Issues
 
-[List each high-priority issue with details]
+[List each high-priority issue with details. Use the same detailed structure: What it means, Why it matters, How we fix it]
 
 ## Medium Priority Issues
 
-[List each medium-priority issue]
+[List each medium-priority issue. Use the same detailed structure: What it means, Why it matters, How we fix it]
 
 ## Low Priority Issues
 
-[List each low-priority issue]
+[List each low-priority issue. Use the same detailed structure: What it means, Why it matters, How we fix it]
 
 ---
 

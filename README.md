@@ -67,8 +67,9 @@ Open Claude Code and use these commands:
 | `/geo schema <url>` | Structured data analysis & generation |
 | `/geo technical <url>` | Technical SEO audit |
 | `/geo content <url>` | Content quality & E-E-A-T assessment |
-| `/geo report <url>` | Generate client-ready GEO report |
-| `/geo report-pdf` | Generate professional PDF report with charts & visualizations |
+| `/geo strategy-report <url>` | Preferred single entrypoint that runs the strategist workflow and generates the final PDF |
+| `/geo report-pdf <url>` | Legacy alias for the strategist report flow |
+| `/geo report <url>` | Legacy markdown-first GEO report flow |
 
 ---
 
@@ -89,7 +90,7 @@ geo-seo-claude/
 │   ├── geo-technical/            # Technical SEO foundations
 │   ├── geo-content/              # Content quality & E-E-A-T
 │   ├── geo-report/               # Client-ready markdown report generation
-│   └── geo-report-pdf/           # Professional PDF report with charts
+│   └── geo-report-pdf/           # Legacy alias for the strategist PDF flow
 ├── agents/                       # 5 parallel subagents
 │   ├── geo-ai-visibility.md      # GEO audit, citability, crawlers, brands
 │   ├── geo-platform-analysis.md  # Platform-specific optimization
@@ -101,6 +102,8 @@ geo-seo-claude/
 │   ├── citability_scorer.py      # AI citability scoring engine
 │   ├── brand_scanner.py          # Brand mention detection
 │   ├── llmstxt_generator.py      # llms.txt validation & generation
+│   ├── strategy_report.py        # Single public strategist entrypoint
+│   ├── full_audit.py             # Shared audit orchestrator used by the strategist entrypoint
 │   └── generate_pdf_report.py    # PDF report generator (ReportLab)
 ├── schema/                       # JSON-LD templates
 │   ├── organization.json         # Organization schema (with sameAs)
@@ -109,6 +112,8 @@ geo-seo-claude/
 │   ├── software-saas.json        # SoftwareApplication schema
 │   ├── product-ecommerce.json    # Product schema with offers
 │   └── website-searchaction.json # WebSite + SearchAction schema
+├── geo/                          # Main skill orchestrator
+│   └── SKILL.md                  # Primary skill file with commands & routing
 ├── install.sh                    # One-command installer
 ├── uninstall.sh                  # Uninstaller
 ├── requirements.txt              # Python dependencies
@@ -121,17 +126,13 @@ geo-seo-claude/
 
 ### Full Audit Flow
 
-When you run `/geo audit https://example.com`:
+When you run `/geo strategy-report https://example.com`:
 
 1. **Discovery** — Fetches homepage, detects business type, crawls sitemap
-2. **Parallel Analysis** — Launches 5 subagents simultaneously:
-   - AI Visibility (citability, crawlers, llms.txt, brand mentions)
-   - Platform Analysis (ChatGPT, Perplexity, Google AIO readiness)
-   - Technical SEO (Core Web Vitals, SSR, security, mobile)
-   - Content Quality (E-E-A-T, readability, freshness)
-   - Schema Markup (detection, validation, generation)
-3. **Synthesis** — Aggregates scores, generates composite GEO Score (0-100)
-4. **Report** — Outputs prioritized action plan with quick wins
+2. **Base Audit** — Runs the `geo-seo-claude` audit/scoring flow
+3. **Optimization Pass** — Adds a separate ReScience `seo-geo` action/recommendation layer
+4. **Synthesis** — Builds one combined markdown and JSON payload
+5. **PDF Output** — Generates one final client-ready PDF
 
 ### Scoring Methodology
 
@@ -164,7 +165,7 @@ Only 11% of domains are cited by both ChatGPT and Google AI Overviews for the sa
 Generates the emerging llms.txt standard file that helps AI crawlers understand your site structure.
 
 ### Client-Ready Reports
-Generates professional GEO reports in markdown or PDF format. PDF reports include score gauges, bar charts, platform readiness visualizations, color-coded tables, and prioritized action plans — ready to deliver to clients.
+Generates professional GEO reports in markdown or PDF format. The final PDF keeps the `geo-seo-claude` score as the numeric source of truth and adds a separate ReScience optimization pass for platform-specific action guidance.
 
 ---
 

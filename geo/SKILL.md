@@ -33,8 +33,9 @@ allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write
 | `/geo schema <url>` | Detect, validate, and generate structured data |
 | `/geo technical <url>` | Traditional technical SEO audit |
 | `/geo content <url>` | Content quality and E-E-A-T assessment |
-| `/geo report <url>` | Generate client-ready GEO deliverable |
-| `/geo report-pdf <url>` | Generate professional PDF report with charts and scores |
+| `/geo strategy-report <url>` | Preferred single entrypoint: run the strategist workflow and generate the final PDF |
+| `/geo report-pdf <url>` | Legacy alias for the strategist report flow |
+| `/geo report <url>` | Legacy generic GEO deliverable path |
 | `/geo quick <url>` | 60-second GEO visibility snapshot |
 
 ---
@@ -81,6 +82,15 @@ Launch these 5 subagents simultaneously:
 2. Calculate composite GEO Score (0-100)
 3. Generate prioritized action plan
 4. Output client-ready report
+
+### Preferred PDF Flow (`/geo strategy-report <url>`)
+
+For Codex, Antigravity, and Gemini CLI, prefer a single-entry orchestration flow:
+
+1. Run the strategist wrapper with `python scripts/strategy_report.py <url>`
+2. The workflow always runs the full strategist analysis and writes the final artifacts
+3. The command prints the JSON payload to stdout for convenience
+4. `report-pdf` remains a legacy alias for the same flow
 
 ### Scoring Methodology
 
@@ -147,7 +157,7 @@ All commands generate structured output:
 
 | Command | Output File |
 |---------|------------|
-| `/geo audit` | `GEO-AUDIT-REPORT.md` |
+| `/geo audit` | `GEO-CLIENT-REPORT.md` |
 | `/geo page` | `GEO-PAGE-ANALYSIS.md` |
 | `/geo citability` | `GEO-CITABILITY-SCORE.md` |
 | `/geo crawlers` | `GEO-CRAWLER-ACCESS.md` |
@@ -158,19 +168,20 @@ All commands generate structured output:
 | `/geo technical` | `GEO-TECHNICAL-AUDIT.md` |
 | `/geo content` | `GEO-CONTENT-ANALYSIS.md` |
 | `/geo report` | `GEO-CLIENT-REPORT.md` (presentation-ready) |
-| `/geo report-pdf` | `GEO-REPORT.pdf` (professional PDF with charts) |
+| `/geo strategy-report` | `output/pdf/GEO-REPORT-<Brand>-<date>.pdf` |
+| `/geo report-pdf` | `output/pdf/GEO-REPORT-<Brand>-<date>.pdf` |
 | `/geo quick` | Inline summary (no file) |
 
 ---
 
 ## PDF Report Generation
 
-The `/geo report-pdf <url>` command generates a professional, branded PDF report:
+The `/geo strategy-report <url>` command is the preferred single-entry flow and generates a professional, branded PDF report. `/geo report-pdf <url>` remains a legacy alias for the same workflow.
 
 ### How It Works
-1. Run the full audit or individual analyses first
-2. Collect all scores and findings into a JSON structure
-3. Execute the PDF generator: `python3 ~/.claude/skills/geo/scripts/generate_pdf_report.py data.json GEO-REPORT.pdf`
+1. Run the single orchestrator: `python scripts/strategy_report.py <url>`
+2. Let the orchestrator collect audit data, add the ReScience optimization pass, and build the JSON
+3. Let the orchestrator call the PDF generator automatically
 
 ### What the PDF Includes
 - **Cover page** with GEO score gauge visualization
@@ -182,10 +193,10 @@ The `/geo report-pdf <url>` command generates a professional, branded PDF report
 - **Methodology & Glossary** appendix
 
 ### Workflow
-1. First run `/geo audit <url>` to collect all data
-2. Then run `/geo report-pdf <url>` to generate the PDF
-3. The tool will compile audit data into JSON, then generate the PDF
-4. Output: `GEO-REPORT.pdf` in the current directory
+1. Run `/geo strategy-report <url>`
+2. The tool will execute the audit, append the ReScience optimization pass, and compile the JSON
+3. The tool will generate the PDF automatically
+4. Output: `output/pdf/GEO-REPORT-<Brand>-<date>.pdf`
 
 ---
 
@@ -217,6 +228,6 @@ The `/geo report-pdf <url>` command generates a professional, branded PDF report
 # Get a 60-second visibility snapshot
 /geo quick https://example.com
 
-# Generate a client-ready report
-/geo report https://example.com
+# Generate the final combined PDF deliverable
+/geo strategy-report https://example.com
 ```

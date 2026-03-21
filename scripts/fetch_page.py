@@ -395,7 +395,7 @@ def crawl_sitemap(url: str, max_pages: int = 50, timeout: int = 15) -> list:
                 sitemap_url, headers=DEFAULT_HEADERS, timeout=timeout
             )
             if response.status_code == 200:
-                soup = BeautifulSoup(response.text, "lxml")
+                soup = BeautifulSoup(response.text, "xml")
 
                 # Check for sitemap index
                 for sitemap in soup.find_all("sitemap"):
@@ -409,7 +409,7 @@ def crawl_sitemap(url: str, max_pages: int = 50, timeout: int = 15) -> list:
                                 timeout=timeout,
                             )
                             if child_resp.status_code == 200:
-                                child_soup = BeautifulSoup(child_resp.text, "lxml")
+                                child_soup = BeautifulSoup(child_resp.text, "xml")
                                 for url_tag in child_soup.find_all("url"):
                                     loc_tag = url_tag.find("loc")
                                     if loc_tag:
