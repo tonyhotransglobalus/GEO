@@ -15,7 +15,7 @@ try:
     from .brand_scanner import generate_brand_report
     from .citability_scorer import analyze_page_citability
     from .fetch_page import crawl_sitemap, fetch_llms_txt, fetch_page, fetch_robots_txt
-    from .generate_pdf_report import generate_report
+    from .generate_pdf_report import generate_report, generate_workbook_report
     from .llmstxt_generator import validate_llmstxt
     from .strategy_engine.artifacts import (
         build_combined_audit_data,
@@ -27,6 +27,7 @@ try:
     from .strategy_engine.markdown import render_markdown_report
     from .strategy_engine import (
         StrategyOrchestrator,
+        build_client_report_sections,
         build_report_sections,
     )
     from .strategy_engine.summary import (
@@ -56,7 +57,7 @@ except ImportError:
     from brand_scanner import generate_brand_report
     from citability_scorer import analyze_page_citability
     from fetch_page import crawl_sitemap, fetch_llms_txt, fetch_page, fetch_robots_txt
-    from generate_pdf_report import generate_report
+    from generate_pdf_report import generate_report, generate_workbook_report
     from llmstxt_generator import validate_llmstxt
     from strategy_engine.artifacts import (
         build_combined_audit_data,
@@ -68,6 +69,7 @@ except ImportError:
     from strategy_engine.markdown import render_markdown_report
     from strategy_engine import (
         StrategyOrchestrator,
+        build_client_report_sections,
         build_report_sections,
     )
     from strategy_engine.summary import (
@@ -112,10 +114,12 @@ def build_workflow_dependencies() -> StrategyWorkflowDependencies:
         build_combined_audit_data=build_combined_audit_data,
         build_output_paths=build_output_paths,
         build_report_sections=build_report_sections,
+        build_client_report_sections=build_client_report_sections,
         render_markdown_report=render_markdown_report,
         write_text=write_text,
         write_json=write_json,
         generate_report=generate_report,
+        generate_workbook_report=generate_workbook_report,
         orchestrator_cls=StrategyOrchestrator,
     )
 

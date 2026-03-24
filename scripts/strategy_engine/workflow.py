@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
@@ -38,10 +39,12 @@ class StrategyWorkflowDependencies:
     build_combined_audit_data: Callable[..., dict]
     build_output_paths: Callable[[str, str], dict[str, Path]]
     build_report_sections: Callable[[Any, Mapping[str, Any]], dict]
+    build_client_report_sections: Callable[[Any, Mapping[str, Any]], dict]
     render_markdown_report: Callable[[dict], str]
     write_text: Callable[[Path, str], None]
     write_json: Callable[[Path, dict], None]
     generate_report: Callable[[dict, str], None]
+    generate_workbook_report: Callable[[dict, str], None]
     orchestrator_cls: type[StrategyOrchestrator]
 
 
@@ -149,6 +152,7 @@ def run_strategy_report(
     )
     quick_wins, medium_term, strategic = deps.build_action_lists(rescience_pass)
     crawler_access = deps.build_crawler_access(robots_data)
+    report_date = datetime.now().strftime("%Y-%m-%d")
     executive_summary = deps.build_executive_summary(
         brand_name=brand_name,
         geo_score=geo_scores["geo_score"],
@@ -210,6 +214,37 @@ def run_strategy_report(
                 "plugin_results": audit_report.plugin_results,
             },
         ),
+        client_report_sections=deps.build_client_report_sections(
+            audit_report,
+            {
+                "date": report_date,
+                "geo_scores": geo_scores,
+                "platforms": platforms,
+                "page_data": page_data,
+                "citability_data": citability_data,
+                "llms_validation": llms_validation,
+                "llms_live": llms_live,
+                "brand_data": brand_data,
+                "robots_data": robots_data,
+                "sitemap_pages": sitemap_pages,
+                "rescience_pass": rescience_pass,
+                "findings": findings,
+                "quick_wins": quick_wins,
+                "medium_term": medium_term,
+                "strategic": strategic,
+                "crawler_access": crawler_access,
+                "query_clusters": [cluster.to_dict() for cluster in audit_report.query_clusters],
+                "competitor_profiles": [profile.to_dict() for profile in audit_report.competitor_profiles],
+                "entity_graph": (
+                    audit_report.entity_graph.to_dict()
+                    if audit_report.entity_graph is not None
+                    else None
+                ),
+                "citation_failures": [failure.to_dict() for failure in audit_report.citation_failures],
+                "plugin_results": audit_report.plugin_results,
+            },
+        ),
+        date=report_date,
     )
 
     report_markdown = deps.render_markdown_report(combined)
@@ -223,10 +258,17 @@ def run_strategy_report(
     deps.write_json(json_path, combined)
 
     if generate_pdf_output:
-        deps.generate_report(combined, str(pdf_path))
-        combined["pdf_path"] = str(pdf_path)
+        deps.generate_report(combined, str(output_paths["client_pdf_path"]))
+        deps.generate_workbook_report(combined, str(output_paths["workbook_pdf_path"]))
+        combined["pdf_path"] = str(output_paths["client_pdf_path"])
+        combined["client_pdf_path"] = str(output_paths["client_pdf_path"])
+        combined["workbook_pdf_path"] = str(output_paths["workbook_pdf_path"])
 
     combined["report_dir"] = str(output_paths["report_dir"])
     combined["markdown_path"] = str(markdown_path)
     combined["json_path"] = str(json_path)
+    if "client_pdf_path" not in combined:
+        combined["pdf_path"] = str(output_paths["client_pdf_path"])
+        combined["client_pdf_path"] = str(output_paths["client_pdf_path"])
+        combined["workbook_pdf_path"] = str(output_paths["workbook_pdf_path"])
     return combined

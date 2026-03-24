@@ -25,6 +25,7 @@ import sys
 import json
 import os
 from datetime import datetime
+from urllib.parse import urlparse
 from xml.sax.saxutils import escape
 from typing import Any, Mapping
 
@@ -211,6 +212,7 @@ def build_styles():
         name='ReportTitle',
         fontName='Helvetica-Bold',
         fontSize=28,
+        leading=30,
         textColor=PRIMARY,
         spaceAfter=6,
         alignment=TA_LEFT,
@@ -219,9 +221,10 @@ def build_styles():
     styles.add(ParagraphStyle(
         name='ReportSubtitle',
         fontName='Helvetica',
-        fontSize=14,
+        fontSize=12,
+        leading=14,
         textColor=TEXT_SECONDARY,
-        spaceAfter=20,
+        spaceAfter=18,
         alignment=TA_LEFT,
     ))
 
@@ -437,8 +440,21 @@ def paragraph_text(value):
     return escape(normalize_text(value)).replace("\n", "<br/>")
 
 
+def display_text(value):
+    text = normalize_text(value)
+    if not text:
+        return ""
+    if text.startswith("http://") or text.startswith("https://"):
+        return text
+    if "-" in text and " " not in text and text.count("-") >= 2:
+        text = text.replace("-", " ").strip().title()
+    if len(text) > 96:
+        text = text[:93].rstrip(" -_,.;:") + "..."
+    return text
+
+
 def make_label_value_paragraph(label, value, style):
-    return Paragraph(f"<b>{escape(label)}:</b> {paragraph_text(value)}", style)
+    return Paragraph(f"<b>{escape(label)}:</b> {paragraph_text(display_text(value))}", style)
 
 
 def wrap_table_rows(rows, styles=None, header_rows=1):
@@ -465,7 +481,7 @@ def _report_item_text(item: Any) -> str:
         for key in ("name", "action", "label", "query", "issue", "competitor", "title", "service_line", "gap_theme"):
             value = item.get(key)
             if value:
-                text = str(value).strip()
+                text = display_text(value)
                 if text:
                     details = []
                     for detail_key in (
@@ -493,7 +509,7 @@ def _report_item_text(item: Any) -> str:
         return str(item)
     if isinstance(item, list):
         return ", ".join(_report_item_text(value) for value in item if value)
-    return str(item).strip()
+    return display_text(item)
 
 
 def _append_bullets(elements, items, styles, style_name="Recommendation"):
@@ -716,8 +732,22 @@ def render_report_sections(elements, report_sections, styles, content_width):
             profile_links = section.get("profile_links") or []
             if profile_links:
                 elements.append(Paragraph("Profile Links", styles["SubHeader"]))
-                _append_bullets(elements, profile_links, styles)
-                elements.append(Spacer(1, 6))
+                rows = [["Source", "URL"]]
+                for link in profile_links:
+                    url = normalize_text(link)
+                    if not url:
+                        continue
+                    parsed = urlparse(url)
+                    source_label = parsed.netloc.replace("www.", "") or "Profile"
+                    rows.append([source_label, url])
+                if len(rows) > 1:
+                    table = build_wrapped_table(
+                        rows,
+                        _fit_widths([150, 350], content_width),
+                        styles,
+                    )
+                    elements.append(table)
+                    elements.append(Spacer(1, 6))
             continue
 
         if key == "technical_geo_gates":
@@ -763,7 +793,17 @@ def render_report_sections(elements, report_sections, styles, content_width):
                 ("90 Days", section.get("ninety_day") or []),
             ):
                 elements.append(Paragraph(label, styles["SubHeader"]))
-                _append_bullets(elements, items, styles)
+                deduped_items = []
+                seen_items = set()
+                for item in items:
+                    text = _report_item_text(item)
+                    if not text:
+                        continue
+                    if text in seen_items:
+                        continue
+                    seen_items.add(text)
+                    deduped_items.append(item)
+                _append_bullets(elements, deduped_items, styles)
                 elements.append(Spacer(1, 4))
             continue
 
@@ -861,7 +901,264 @@ def build_finding_card(finding, styles, width):
     return card
 
 
+def _client_sections_from_data(data):
+    sections = data.get("client_report_sections")
+    if isinstance(sections, Mapping) and sections:
+        return sections
+
+    scores = data.get("scores", {}) if isinstance(data.get("scores"), Mapping) else {}
+    findings = [item for item in data.get("findings", []) if isinstance(item, Mapping)]
+    return {
+        "cover": {
+            "title": "GEO Client Brief",
+            "subtitle": f"Business roadmap for {normalize_text(data.get('brand_name'))}",
+            "website": normalize_text(data.get("url")),
+            "analysis_date": normalize_text(data.get("date")),
+            "readiness_snapshot": [
+                {"label": "GEO", "value": f"{int(data.get('geo_score', 0))}/100"},
+                {"label": "AI Citability", "value": f"{int(scores.get('ai_citability', 0))}/100"},
+                {"label": "Technical", "value": f"{int(scores.get('technical', 0))}/100"},
+                {"label": "Schema", "value": f"{int(scores.get('schema', 0))}/100"},
+            ],
+        },
+        "decision_summary": {
+            "overview": normalize_text(data.get("executive_summary")),
+        },
+        "priority_risks": {
+            "items": [
+                {
+                    "title": normalize_text(item.get("title")),
+                    "severity": normalize_text(item.get("severity")),
+                    "business_impact": normalize_text(item.get("leadership_impact") or item.get("summary")),
+                    "evidence": normalize_text(item.get("observed_evidence")),
+                }
+                for item in findings[:3]
+            ],
+        },
+        "top_opportunities": {
+            "items": [
+                {
+                    "title": normalize_text(item),
+                    "priority": "high",
+                    "why_it_matters": "Recommended next action from the current audit.",
+                }
+                for item in data.get("quick_wins", [])[:3]
+            ],
+        },
+        "market_snapshot": {
+            "title": "Market Visibility Snapshot",
+            "summary": "The competitive picture is still incomplete in this sample, so this page highlights the known gap rather than forcing a weak benchmark.",
+            "confidence": "limited",
+            "benchmark_rows": [],
+        },
+        "roadmap": {
+            "thirty_day": [normalize_text(item) for item in data.get("quick_wins", []) if normalize_text(item)],
+            "sixty_day": [normalize_text(item) for item in data.get("medium_term", []) if normalize_text(item)],
+            "ninety_day": [normalize_text(item) for item in data.get("strategic", []) if normalize_text(item)],
+        },
+        "methodology": {
+            "summary": "Point-in-time GEO audit based on live crawl, content scoring, and visibility sampling.",
+            "confidence_note": "Market data is directional rather than exhaustive in this run.",
+        },
+    }
+
+
+def _append_client_list(elements, items, styles):
+    for index, item in enumerate(items, 1):
+        if isinstance(item, Mapping):
+            title = normalize_text(
+                item.get("title")
+                or item.get("label")
+                or item.get("action")
+                or item.get("query")
+            )
+            details = []
+            for key in (
+                "severity",
+                "priority",
+                "opportunity_score",
+                "business_impact",
+                "why_it_matters",
+                "evidence",
+                "summary",
+            ):
+                value = normalize_text(item.get(key))
+                if not value:
+                    continue
+                if key == "opportunity_score":
+                    details.append(f"Opportunity Score: {value}")
+                else:
+                    details.append(value)
+            text = f"<b>{index}. {escape(title)}</b>"
+            if details:
+                text += "<br/>" + "<br/>".join(paragraph_text(value) for value in details)
+        else:
+            text = f"<b>{index}.</b> {paragraph_text(item)}"
+        elements.append(Paragraph(text, styles["Recommendation"]))
+
+
+def _build_snapshot_table(snapshot_items, styles, content_width):
+    rows = [["Metric", "Value"]]
+    for item in snapshot_items:
+        if not isinstance(item, Mapping):
+            continue
+        rows.append([item.get("label", ""), item.get("value", "")])
+    return build_wrapped_table(
+        rows,
+        _fit_widths([160, max(120, content_width - 160)], content_width),
+        styles,
+    )
+
+
 def generate_report(data, output_path="GEO-REPORT.pdf"):
+    """Generate the client-facing brief PDF."""
+
+    doc = SimpleDocTemplate(
+        output_path,
+        pagesize=letter,
+        topMargin=55,
+        bottomMargin=55,
+        leftMargin=50,
+        rightMargin=50,
+    )
+
+    styles = build_styles()
+    # Tighten the executive brief so sparse runs stay compact without affecting workbook density.
+    styles["ReportSubtitle"].spaceAfter = 14
+    styles["SectionHeader"].spaceBefore = 16
+    styles["SectionHeader"].spaceAfter = 8
+    styles["SubHeader"].spaceBefore = 10
+    styles["BodyText_Custom"].leading = 13
+    styles["Recommendation"].leading = 13
+    styles["Recommendation"].spaceBefore = 2
+    styles["Recommendation"].spaceAfter = 2
+    styles["HighlightBox"].spaceBefore = 4
+    styles["HighlightBox"].spaceAfter = 4
+    elements = []
+    content_width = doc.width
+    client_sections = _client_sections_from_data(data)
+
+    cover = client_sections.get("cover", {}) if isinstance(client_sections, Mapping) else {}
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(cover.get("title", "GEO Client Brief"), styles["ReportTitle"]))
+    elements.append(Spacer(1, 4))
+    if cover.get("subtitle"):
+        elements.append(Paragraph(paragraph_text(cover.get("subtitle")), styles["ReportSubtitle"]))
+    elements.append(HRFlowable(width="100%", thickness=2, color=ACCENT, spaceAfter=16))
+
+    details_rows = [
+        [
+            Paragraph(paragraph_text("Website"), styles["TableLabelCell"]),
+            Paragraph(paragraph_text(cover.get("website") or data.get("url")), styles["TableCell"]),
+        ],
+        [
+            Paragraph(paragraph_text("Analysis Date"), styles["TableLabelCell"]),
+            Paragraph(paragraph_text(cover.get("analysis_date") or data.get("date")), styles["TableCell"]),
+        ],
+    ]
+    details_table = Table(details_rows, colWidths=[112, 368], hAlign="LEFT")
+    details_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.5, lightgrey),
+    ]))
+    elements.append(details_table)
+    elements.append(Spacer(1, 12))
+
+    snapshot_items = cover.get("readiness_snapshot") or []
+    if snapshot_items:
+        elements.append(Paragraph("Readiness Snapshot", styles["SubHeader"]))
+        elements.append(_build_snapshot_table(snapshot_items, styles, content_width))
+        elements.append(Spacer(1, 10))
+
+    decision_summary = client_sections.get("decision_summary", {}) if isinstance(client_sections, Mapping) else {}
+    elements.append(Paragraph("Decision Summary", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    elements.append(
+        Paragraph(
+            paragraph_text(decision_summary.get("overview") or data.get("executive_summary") or "No summary available."),
+            styles["BodyText_Custom"],
+        )
+    )
+    elements.append(Spacer(1, 12))
+
+    risk_section = client_sections.get("priority_risks", {}) if isinstance(client_sections, Mapping) else {}
+    elements.append(Paragraph("Top Risks", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    risk_items = risk_section.get("items") or []
+    if risk_items:
+        _append_client_list(elements, risk_items, styles)
+    else:
+        elements.append(Paragraph("No major risks were surfaced in this run.", styles["BodyText_Custom"]))
+    elements.append(Spacer(1, 12))
+
+    opportunity_section = client_sections.get("top_opportunities", {}) if isinstance(client_sections, Mapping) else {}
+    elements.append(Paragraph("Top Opportunities", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    opportunity_items = opportunity_section.get("items") or []
+    if opportunity_items:
+        _append_client_list(elements, opportunity_items, styles)
+    else:
+        elements.append(Paragraph("No priority opportunities were surfaced in this run.", styles["BodyText_Custom"]))
+    elements.append(Spacer(1, 12))
+
+    market_snapshot = client_sections.get("market_snapshot", {}) if isinstance(client_sections, Mapping) else {}
+    elements.append(Paragraph(market_snapshot.get("title", "Market Visibility Snapshot"), styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    elements.append(Paragraph(paragraph_text(market_snapshot.get("summary")), styles["BodyText_Custom"]))
+    benchmark_rows = market_snapshot.get("benchmark_rows") or []
+    if benchmark_rows:
+        rows = [["Source", "Bucket", "Why It Matters"]]
+        for row in benchmark_rows:
+            if not isinstance(row, Mapping):
+                continue
+            rows.append([
+                row.get("label", ""),
+                row.get("bucket", ""),
+                row.get("summary", ""),
+            ])
+        elements.append(Spacer(1, 8))
+        elements.append(
+            build_wrapped_table(
+                rows,
+                _fit_widths([140, 110, 262], content_width),
+                styles,
+            )
+        )
+    elements.append(Spacer(1, 12))
+
+    roadmap = client_sections.get("roadmap", {}) if isinstance(client_sections, Mapping) else {}
+    elements.append(Paragraph("30/60/90 Roadmap", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    for label, items in (
+        ("30 Days", roadmap.get("thirty_day") or []),
+        ("60 Days", roadmap.get("sixty_day") or []),
+        ("90 Days", roadmap.get("ninety_day") or []),
+    ):
+        elements.append(Paragraph(label, styles["SubHeader"]))
+        if items:
+            _append_client_list(elements, items, styles)
+        else:
+            elements.append(Paragraph("No actions captured.", styles["BodyText_Custom"]))
+        elements.append(Spacer(1, 6))
+
+    methodology = client_sections.get("methodology", {}) if isinstance(client_sections, Mapping) else {}
+    elements.append(Paragraph("Methodology and Confidence", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    elements.append(Paragraph(paragraph_text(methodology.get("summary")), styles["BodyText_Custom"]))
+    confidence_note = normalize_text(methodology.get("confidence_note"))
+    if confidence_note:
+        elements.append(Spacer(1, 6))
+        elements.append(Paragraph(paragraph_text(confidence_note), styles["HighlightBox"]))
+
+    doc.build(elements, onFirstPage=header_footer, onLaterPages=header_footer)
+    return output_path
+
+
+def generate_workbook_report(data, output_path="GEO-STRATEGIST-WORKBOOK.pdf"):
     """Generate the full PDF report from audit data."""
 
     doc = SimpleDocTemplate(
@@ -927,7 +1224,7 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
 
     # Title
     elements.append(Paragraph("GEO Strategist Workbook", styles['ReportTitle']))
-    elements.append(Spacer(1, 8))
+    elements.append(Spacer(1, 12))
 
     # Subtitle
     elements.append(Paragraph(

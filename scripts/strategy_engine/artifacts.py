@@ -54,6 +54,8 @@ def build_combined_audit_data(
     plugin_results: dict | None = None,
     report_model: dict | None = None,
     report_sections: dict | None = None,
+    client_report_sections: dict | None = None,
+    presentation_metadata: dict | None = None,
 ) -> dict:
     combined = {
         "url": url,
@@ -79,6 +81,10 @@ def build_combined_audit_data(
         combined["report_model"] = report_model
     if report_sections is not None:
         combined["report_sections"] = report_sections
+    if client_report_sections is not None:
+        combined["client_report_sections"] = client_report_sections
+    if presentation_metadata is not None:
+        combined["presentation_metadata"] = presentation_metadata
     return combined
 
 
@@ -94,9 +100,12 @@ def write_json(path: Path, data: dict) -> None:
 
 def build_output_paths(brand_name: str, date_stamp: str) -> dict[str, Path]:
     report_dir = DEFAULT_REPORTS_DIR / f"{slugify(brand_name)}-{date_stamp}"
+    client_pdf_path = report_dir / "GEO-REPORT.pdf"
     return {
         "report_dir": report_dir,
         "markdown_path": report_dir / "GEO-CLIENT-REPORT.md",
         "json_path": report_dir / "audit-data.json",
-        "pdf_path": report_dir / "GEO-REPORT.pdf",
+        "pdf_path": client_pdf_path,
+        "client_pdf_path": client_pdf_path,
+        "workbook_pdf_path": report_dir / "GEO-STRATEGIST-WORKBOOK.pdf",
     }

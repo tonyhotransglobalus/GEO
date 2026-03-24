@@ -19,6 +19,16 @@ REPORT_SECTION_ORDER = (
     "evidence_appendix",
 )
 
+CLIENT_REPORT_SECTION_ORDER = (
+    "cover",
+    "decision_summary",
+    "priority_risks",
+    "top_opportunities",
+    "market_snapshot",
+    "roadmap",
+    "methodology",
+)
+
 EVIDENCE_APPENDIX_TITLE = "Evidence and Methodology Appendix"
 LEGACY_REPORT_SECTION_KEYS = (
     "executive_summary",
@@ -448,6 +458,27 @@ def _normalized_text(value: Any) -> str:
     )
 
 
+def _display_label(value: Any, *, fallback: str = "") -> str:
+    text = " ".join(_string(value).split())
+    fallback_text = " ".join(_string(fallback).split())
+    if not text:
+        return fallback_text
+
+    if text.startswith("http://") or text.startswith("https://"):
+        return text
+
+    if len(text) > 96:
+        if fallback_text:
+            return fallback_text
+        text = text[:93].rstrip(" -_,.;:") + "..."
+
+    if "-" in text and " " not in text and text.count("-") >= 2:
+        humanized = text.replace("-", " ").strip().title()
+        return humanized or fallback_text
+
+    return text
+
+
 def _service_line_variants(value: str) -> tuple[str, ...]:
     normalized = _normalized_text(value)
     variants = {normalized}
@@ -568,7 +599,10 @@ def _service_line_rows(report_model: ReportModel, audit_data: Mapping[str, Any])
     for cluster in query_clusters[:3]:
         if not isinstance(cluster, Mapping):
             continue
-        label = _string(cluster.get("label")).replace("-", " ").title() or "Priority Topic"
+        label = _display_label(
+            cluster.get("label"),
+            fallback=_string(_mapping(cluster.get("metadata")).get("seed_topic")) or "Priority Topic",
+        )
         if label in seen_service_lines:
             continue
         fallback_rows.append(
@@ -923,7 +957,14 @@ def _build_roadmap(report_model: ReportModel, audit_data: Mapping[str, Any]) -> 
 
     thirty_day_items = _dedupe_text([*priority_actions.get("P0", []), *priority_actions.get("P1", []), *quick_wins])
     sixty_day_items = _dedupe_text([*medium_term, *priority_actions.get("P2", [])])
-    ninety_day_items = _dedupe_text([*strategic, *priority_actions.get("P2", [])])
+    sixty_day_seen = {_normalized_text(item) for item in sixty_day_items}
+    thirty_day_seen = {_normalized_text(item) for item in thirty_day_items}
+    ninety_day_items = [
+        item
+        for item in _dedupe_text([*strategic, *priority_actions.get("P2", [])])
+        if _normalized_text(item) not in sixty_day_seen
+        and _normalized_text(item) not in thirty_day_seen
+    ]
 
     def build_items(actions: list[str], source: str) -> list[dict[str, Any]]:
         return [
@@ -1254,6 +1295,158 @@ def _build_execution_ledger(report_model: ReportModel, audit_data: Mapping[str, 
         "sixty_day": roadmap.get("sixty_day"),
         "ninety_day": roadmap.get("ninety_day"),
     }
+
+
+def _client_cover(report_model: ReportModel, audit_data: Mapping[str, Any]) -> dict[str, Any]:
+    geo_scores = _mapping(audit_data.get("geo_scores"))
+    scores = _mapping(geo_scores.get("scores"))
+    date_value = _string(audit_data.get("date"))
+    return {
+        "title": "GEO Client Brief",
+        "subtitle": f"Business roadmap for {report_model.brand_name}",
+        "website": _string(report_model.site_snapshot.canonical_url or report_model.site_snapshot.url),
+        "analysis_date": date_value,
+        "readiness_snapshot": [
+            {"label": "GEO", "value": f"{_int_score(geo_scores.get('geo_score'))}/100"},
+            {"label": "AI Citability", "value": f"{_int_score(scores.get('ai_citability'))}/100"},
+            {"label": "Technical", "value": f"{_int_score(scores.get('technical'))}/100"},
+            {"label": "Schema", "value": f"{_int_score(scores.get('schema'))}/100"},
+        ],
+    }
+
+
+def _client_priority_risks(report_model: ReportModel, audit_data: Mapping[str, Any]) -> dict[str, Any]:
+    findings = [item for item in _sequence(audit_data.get("findings")) if isinstance(item, Mapping)]
+    risks = []
+    for finding in findings[:3]:
+        risks.append(
+            {
+                "title": _display_label(finding.get("title")),
+                "severity": _string(finding.get("severity")) or "medium",
+                "business_impact": _string(finding.get("leadership_impact") or finding.get("summary")),
+                "evidence": _string(finding.get("observed_evidence") or finding.get("description")),
+            }
+        )
+    return {"items": risks}
+
+
+def _client_top_opportunities(report_model: ReportModel, audit_data: Mapping[str, Any]) -> dict[str, Any]:
+    opportunity_map = _build_opportunity_map(report_model, audit_data)
+    items = []
+    for item in _sequence(opportunity_map.get("opportunities")):
+        if not isinstance(item, Mapping):
+            continue
+        if _string(item.get("label")).lower() != "high":
+            continue
+        items.append(
+            {
+                "title": _display_label(item.get("query")),
+                "priority": _string(item.get("label")) or "high",
+                "opportunity_score": _int_score(item.get("opportunity_score")),
+                "why_it_matters": "This topic is strategically open in the current sample.",
+            }
+        )
+        if len(items) == 3:
+            break
+    if items:
+        return {"items": items}
+
+    service_lines = _service_line_rows(report_model, audit_data)
+    fallback_items = []
+    for row in service_lines[:3]:
+        fallback_items.append(
+            {
+                "title": _display_label(row.get("service_line")),
+                "priority": _string(row.get("priority")) or "medium",
+                "opportunity_score": _int_score(row.get("opportunity_score")),
+                "why_it_matters": "The service line is in scope for the current GEO audit.",
+            }
+        )
+    return {"items": fallback_items}
+
+
+def _client_market_snapshot(report_model: ReportModel, audit_data: Mapping[str, Any]) -> dict[str, Any]:
+    competitor_gap = _build_competitor_gap_analysis(report_model, audit_data)
+    source_inventory = _mapping(competitor_gap.get("source_inventory"))
+    competitor_owned = _dedupe_text(source_inventory.get("competitor_owned"))
+    earned_media = _dedupe_text(source_inventory.get("earned_media"))
+    supported = len(competitor_owned) + len(earned_media) >= 2
+
+    benchmark_rows = []
+    if supported:
+        for domain in competitor_owned[:3]:
+            benchmark_rows.append(
+                {
+                    "label": _display_label(domain),
+                    "bucket": "Competitor-owned",
+                    "summary": "Observed in the current market sample.",
+                }
+            )
+        for domain in earned_media[:3]:
+            benchmark_rows.append(
+                {
+                    "label": _display_label(domain),
+                    "bucket": "Earned-media",
+                    "summary": "Third-party sources are part of the citation picture.",
+                }
+            )
+
+    summary_text = _string(_mapping(competitor_gap.get("summary")).get("discovery_note"))
+    if supported:
+        summary_text = summary_text or "Competitor and third-party signals were strong enough to support a concise market benchmark."
+    else:
+        summary_text = (
+            "The competitive picture is still incomplete in this sample, so this page highlights the known gap rather than forcing a weak benchmark."
+        )
+
+    return {
+        "title": "Market Visibility Snapshot",
+        "summary": summary_text,
+        "confidence": "supported" if supported else "limited",
+        "benchmark_rows": benchmark_rows,
+    }
+
+
+def _client_roadmap(report_model: ReportModel, audit_data: Mapping[str, Any]) -> dict[str, Any]:
+    roadmap = _build_roadmap(report_model, audit_data)
+    return {
+        "thirty_day": [_string(item.get("action")) for item in _sequence(roadmap.get("thirty_day")) if isinstance(item, Mapping) and _string(item.get("action"))],
+        "sixty_day": [_string(item.get("action")) for item in _sequence(roadmap.get("sixty_day")) if isinstance(item, Mapping) and _string(item.get("action"))],
+        "ninety_day": [_string(item.get("action")) for item in _sequence(roadmap.get("ninety_day")) if isinstance(item, Mapping) and _string(item.get("action"))],
+    }
+
+
+def _client_methodology(report_model: ReportModel, audit_data: Mapping[str, Any]) -> dict[str, Any]:
+    market_snapshot = _client_market_snapshot(report_model, audit_data)
+    return {
+        "summary": "Point-in-time GEO audit based on live crawl, content scoring, and visibility sampling.",
+        "confidence_note": (
+            "Market data is directional rather than exhaustive in this run."
+            if _string(market_snapshot.get("confidence")) == "limited"
+            else "Market observations were strong enough for a concise benchmark view."
+        ),
+    }
+
+
+def build_client_report_sections(
+    report_model: ReportModel,
+    audit_data: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    context = _get_report_context(report_model, audit_data or {})
+    decision_summary = _build_decision_summary(report_model, context)
+
+    sections = {
+        "cover": _client_cover(report_model, context),
+        "decision_summary": {
+            "overview": _string(decision_summary.get("overview")),
+        },
+        "priority_risks": _client_priority_risks(report_model, context),
+        "top_opportunities": _client_top_opportunities(report_model, context),
+        "market_snapshot": _client_market_snapshot(report_model, context),
+        "roadmap": _client_roadmap(report_model, context),
+        "methodology": _client_methodology(report_model, context),
+    }
+    return serialize_model({key: sections[key] for key in CLIENT_REPORT_SECTION_ORDER})
 
 
 def build_report_sections(

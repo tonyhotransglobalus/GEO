@@ -48,7 +48,11 @@ from .artifacts import (
     write_text,
 )
 from .markdown import render_markdown_report
-from .reporting import build_report_sections, report_sections_to_markdown
+from .reporting import (
+    build_client_report_sections,
+    build_report_sections,
+    report_sections_to_markdown,
+)
 from .workflow import StrategyWorkflowDependencies, run_strategy_report
 
 __all__ = [
@@ -91,6 +95,7 @@ __all__ = [
     "extract_brand_name",
     "build_rescience_pass",
     "render_markdown_report",
+    "build_client_report_sections",
     "build_report_sections",
     "report_sections_to_markdown",
     "StrategyWorkflowDependencies",

@@ -8,7 +8,11 @@ from unittest.mock import patch
 
 from reportlab.platypus import Paragraph
 
-from scripts.generate_pdf_report import generate_report, wrap_table_rows
+from scripts.generate_pdf_report import (
+    generate_report,
+    generate_workbook_report,
+    wrap_table_rows,
+)
 from scripts.strategy_engine.plugins.readiness import (
     ReadinessInputs,
     ReadinessPlugin,
@@ -79,6 +83,11 @@ class FullAuditHelpersTest(unittest.TestCase):
             paths["pdf_path"],
             Path("output/reports/example-co-2026-03-17/GEO-REPORT.pdf"),
         )
+        self.assertEqual(paths["pdf_path"], paths["client_pdf_path"])
+        self.assertEqual(
+            paths["workbook_pdf_path"],
+            Path("output/reports/example-co-2026-03-17/GEO-STRATEGIST-WORKBOOK.pdf"),
+        )
 
     def test_cli_only_requires_url(self):
         args = parse_args(["https://example.com"])
@@ -92,6 +101,7 @@ class FullAuditHelpersTest(unittest.TestCase):
 
     @patch("scripts.full_audit.write_json")
     @patch("scripts.full_audit.write_text")
+    @patch("scripts.full_audit.generate_workbook_report")
     @patch("scripts.full_audit.generate_report")
     @patch("scripts.full_audit.generate_brand_report")
     @patch("scripts.full_audit.analyze_page_citability")
@@ -110,6 +120,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         citability_mock,
         brand_report_mock,
         generate_report_mock,
+        generate_workbook_report_mock,
         write_text_mock,
         write_json_mock,
     ):
@@ -207,11 +218,13 @@ class FullAuditHelpersTest(unittest.TestCase):
             result["plugin_results"]["readiness"]["geo_scores"]["geo_score"], 91
         )
         self.assertFalse(generate_report_mock.called)
+        self.assertFalse(generate_workbook_report_mock.called)
         self.assertTrue(write_text_mock.called)
         self.assertTrue(write_json_mock.called)
 
     @patch("scripts.full_audit.write_json")
     @patch("scripts.full_audit.write_text")
+    @patch("scripts.full_audit.generate_workbook_report")
     @patch("scripts.full_audit.generate_report")
     @patch("scripts.full_audit.generate_brand_report")
     @patch("scripts.full_audit.analyze_page_citability")
@@ -230,6 +243,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         citability_mock,
         brand_report_mock,
         generate_report_mock,
+        generate_workbook_report_mock,
         write_text_mock,
         write_json_mock,
     ):
@@ -407,11 +421,13 @@ class FullAuditHelpersTest(unittest.TestCase):
             "Example Co alternatives",
         )
         self.assertFalse(generate_report_mock.called)
+        self.assertFalse(generate_workbook_report_mock.called)
         self.assertTrue(write_text_mock.called)
         self.assertTrue(write_json_mock.called)
 
     @patch("scripts.full_audit.write_json")
     @patch("scripts.full_audit.write_text")
+    @patch("scripts.full_audit.generate_workbook_report")
     @patch("scripts.full_audit.generate_report")
     @patch("scripts.full_audit.generate_brand_report")
     @patch("scripts.full_audit.analyze_page_citability")
@@ -430,6 +446,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         citability_mock,
         brand_report_mock,
         generate_report_mock,
+        generate_workbook_report_mock,
         write_text_mock,
         write_json_mock,
     ):
@@ -588,6 +605,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         self.assertIn("entity_analysis", result["plugin_results"])
         self.assertIn("citation_diagnosis", result["plugin_results"])
         self.assertFalse(generate_report_mock.called)
+        self.assertFalse(generate_workbook_report_mock.called)
         self.assertTrue(write_text_mock.called)
         self.assertTrue(write_json_mock.called)
 
@@ -732,6 +750,7 @@ class FullAuditHelpersTest(unittest.TestCase):
 
     @patch("scripts.full_audit.write_json")
     @patch("scripts.full_audit.write_text")
+    @patch("scripts.full_audit.generate_workbook_report")
     @patch("scripts.full_audit.generate_report")
     @patch("scripts.full_audit.generate_brand_report")
     @patch("scripts.full_audit.analyze_page_citability")
@@ -750,6 +769,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         citability_mock,
         brand_report_mock,
         generate_report_mock,
+        generate_workbook_report_mock,
         write_text_mock,
         write_json_mock,
     ):
@@ -816,14 +836,18 @@ class FullAuditHelpersTest(unittest.TestCase):
 
         self.assertIn("report_model", result)
         self.assertIn("report_sections", result)
+        self.assertIn("client_report_sections", result)
         self.assertEqual(result["report_model"]["brand_name"], "Example Co")
         self.assertIn("decision_summary", result["report_sections"])
+        self.assertIn("decision_summary", result["client_report_sections"])
         self.assertFalse(generate_report_mock.called)
+        self.assertFalse(generate_workbook_report_mock.called)
         self.assertTrue(write_text_mock.called)
         self.assertTrue(write_json_mock.called)
 
     @patch("scripts.full_audit.write_json")
     @patch("scripts.full_audit.write_text")
+    @patch("scripts.full_audit.generate_workbook_report")
     @patch("scripts.full_audit.generate_report")
     @patch("scripts.full_audit.generate_brand_report")
     @patch("scripts.full_audit.analyze_page_citability")
@@ -842,6 +866,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         citability_mock,
         brand_report_mock,
         generate_report_mock,
+        generate_workbook_report_mock,
         write_text_mock,
         write_json_mock,
     ):
@@ -939,6 +964,7 @@ class FullAuditHelpersTest(unittest.TestCase):
 
         self.assertEqual(result["geo_score"], 91)
         self.assertFalse(generate_report_mock.called)
+        self.assertFalse(generate_workbook_report_mock.called)
         self.assertTrue(write_text_mock.called)
         self.assertTrue(write_json_mock.called)
 
@@ -1087,7 +1113,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         self.assertIsInstance(wrapped[0][0], Paragraph)
         self.assertIsInstance(wrapped[1][1], Paragraph)
 
-    def test_pdf_generation_includes_rescience_section_text(self):
+    def test_client_pdf_generation_uses_client_brief_structure_and_excludes_workbook_sections(self):
         report_data = {
             "url": "https://example.com",
             "brand_name": "Example Co",
@@ -1133,6 +1159,52 @@ class FullAuditHelpersTest(unittest.TestCase):
                 "platform_guidance": {"ChatGPT": ["Refresh content"]},
                 "geo_methods": [{"method": "Cite Sources", "impact": "+40%"}],
             },
+            "client_report_sections": {
+                "cover": {
+                    "title": "GEO Client Brief",
+                    "subtitle": "Executive summary for Example Co",
+                    "readiness_snapshot": [
+                        {"label": "GEO", "value": "52/100"},
+                        {"label": "AI Citability", "value": "28/100"},
+                    ],
+                },
+                "decision_summary": {
+                    "overview": "Example Co has a workable technical base but weak AI citation readiness.",
+                },
+                "priority_risks": {
+                    "items": [
+                        {
+                            "title": "Low citation readiness",
+                            "business_impact": "The brand is missing AI-assisted discovery demand.",
+                            "evidence": "Citability scored 28/100.",
+                        }
+                    ]
+                },
+                "top_opportunities": {
+                    "items": [
+                        {
+                            "title": "Answer-first service pages",
+                            "why_it_matters": "High-intent queries are still open.",
+                            "priority": "high",
+                        }
+                    ]
+                },
+                "market_snapshot": {
+                    "title": "Market Visibility Snapshot",
+                    "summary": "The competitive picture is still incomplete in this sample, so this page highlights the known gap rather than forcing a weak benchmark.",
+                    "confidence": "limited",
+                    "benchmark_rows": [],
+                },
+                "roadmap": {
+                    "thirty_day": ["Publish llms.txt."],
+                    "sixty_day": ["Improve schema."],
+                    "ninety_day": ["Build recurring GEO content."],
+                },
+                "methodology": {
+                    "summary": "Point-in-time GEO audit based on live crawl, content scoring, and visibility sampling.",
+                    "confidence_note": "Competitor data is sparse in this run.",
+                },
+            },
         }
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1148,15 +1220,18 @@ class FullAuditHelpersTest(unittest.TestCase):
             )
             pdf_text = txt_path.read_text(encoding="utf-8")
 
-        self.assertIn("ReScience Optimization Pass", pdf_text)
-        self.assertIn("Critical item", pdf_text)
-        self.assertIn("Why this matters to leadership", pdf_text)
-        self.assertIn("What marketing should do", pdf_text)
-        self.assertIn("What dev should change", pdf_text)
-        self.assertIn("Observed evidence", pdf_text)
-        self.assertIn("Keep accessible with a clearly documented policy", pdf_text)
+        self.assertIn("Decision Summary", pdf_text)
+        self.assertIn("Top Risks", pdf_text)
+        self.assertIn("Top Opportunities", pdf_text)
+        self.assertIn("Market Visibility Snapshot", pdf_text)
+        self.assertIn("30/60/90 Roadmap", pdf_text)
+        self.assertIn("Methodology and Confidence", pdf_text)
+        self.assertIn("competitive picture is still incomplete", pdf_text.lower())
+        self.assertNotIn("Developer Appendix", pdf_text)
+        self.assertNotIn("Citation Diagnosis", pdf_text)
+        self.assertNotIn("Evidence and Methodology Appendix", pdf_text)
 
-    def test_pdf_generation_with_report_sections_renders_strategist_headings(self):
+    def test_workbook_pdf_generation_with_report_sections_renders_strategist_headings(self):
         report_data = {
             "url": "https://example.com",
             "brand_name": "Example Co",
@@ -1221,7 +1296,7 @@ class FullAuditHelpersTest(unittest.TestCase):
             pdf_path = Path(temp_dir) / "report.pdf"
             txt_path = Path(temp_dir) / "report.txt"
 
-            generate_report(report_data, str(pdf_path))
+            generate_workbook_report(report_data, str(pdf_path))
             subprocess.run(
                 ["pdftotext", str(pdf_path), str(txt_path)],
                 check=True,
@@ -1240,7 +1315,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         self.assertIn("Developer Appendix", pdf_text)
         self.assertIn("Evidence and Methodology Appendix", pdf_text)
 
-    def test_pdf_generation_with_report_sections_keeps_strategist_tables_within_page_width(self):
+    def test_workbook_pdf_generation_normalizes_long_labels_and_keeps_strategist_tables_within_page_width(self):
         report_data = {
             "url": "https://example.com",
             "brand_name": "Example Co",
@@ -1276,12 +1351,23 @@ class FullAuditHelpersTest(unittest.TestCase):
                 },
                 "opportunity_map": {"clusters": [{"label": "example-co"}]},
                 "competitor_gap_analysis": {"competitors": [{"name": "Competitor A"}]},
-                "citation_diagnosis": {"failures": [{"query": "example geo strategy"}]},
-                "entity_authority_analysis": {"earned_media_signals": ["example.com"]},
+                "citation_diagnosis": {
+                    "failures": [
+                        {
+                            "query": "services-we-provide-professional-and-complete-all-in-one-service-for-the-clients-to-enjoy-services-from-life-insurance-annuity-and-financial-management",
+                        }
+                    ]
+                },
+                "entity_authority_analysis": {
+                    "earned_media_signals": [
+                        "https://www.linkedin.com/company/example",
+                        "https://www.youtube.com/channel/example",
+                    ]
+                },
                 "roadmap": {
-                    "thirty_day": ["Fix llms.txt"],
-                    "sixty_day": ["Improve schema"],
-                    "ninety_day": ["Expand entity authority"],
+                    "thirty_day": ["Fix llms.txt", "Fix llms.txt"],
+                    "sixty_day": ["Improve schema", "Improve schema"],
+                    "ninety_day": ["Expand entity authority", "Expand entity authority"],
                 },
                 "developer_appendix": {"technical_actions": ["Keep SSR enabled"]},
                 "evidence_appendix": {
@@ -1316,9 +1402,22 @@ class FullAuditHelpersTest(unittest.TestCase):
         with patch("scripts.generate_pdf_report.build_wrapped_table", side_effect=capture_widths):
             with tempfile.TemporaryDirectory() as temp_dir:
                 pdf_path = Path(temp_dir) / "report.pdf"
-                generate_report(report_data, str(pdf_path))
+                txt_path = Path(temp_dir) / "report.txt"
+                generate_workbook_report(report_data, str(pdf_path))
+                subprocess.run(
+                    ["pdftotext", str(pdf_path), str(txt_path)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                pdf_text = txt_path.read_text(encoding="utf-8")
 
         self.assertFalse(any(total > 512 for total in widths))
+        self.assertNotIn(
+            "services-we-provide-professional-and-complete-all-in-one-service-for-the-clients-to-enjoy",
+            pdf_text,
+        )
+        self.assertEqual(pdf_text.count("Fix llms.txt"), 1)
 
 
 if __name__ == "__main__":

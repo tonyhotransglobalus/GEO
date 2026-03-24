@@ -87,6 +87,10 @@ class StrategyWorkflowTest(unittest.TestCase):
             calls.append(("build_report_sections", report_model.to_dict()["brand_name"]))
             return {"executive_summary": {"overview": "Strategic overview"}}
 
+        def build_client_report_sections(report_model, audit_data):
+            calls.append(("build_client_report_sections", report_model.to_dict()["brand_name"]))
+            return {"decision_summary": {"overview": "Client overview"}}
+
         def build_combined_audit_data(**kwargs):
             calls.append(("build_combined_audit_data", kwargs["brand_name"]))
             return {
@@ -110,6 +114,7 @@ class StrategyWorkflowTest(unittest.TestCase):
                 "plugin_results": kwargs["plugin_results"],
                 "report_model": kwargs["report_model"],
                 "report_sections": kwargs["report_sections"],
+                "client_report_sections": kwargs["client_report_sections"],
             }
 
         def build_output_paths(brand_name, date_stamp):
@@ -119,6 +124,8 @@ class StrategyWorkflowTest(unittest.TestCase):
                 "markdown_path": Path("output/reports/example/GEO-CLIENT-REPORT.md"),
                 "json_path": Path("output/reports/example/audit-data.json"),
                 "pdf_path": Path("output/reports/example/GEO-REPORT.pdf"),
+                "client_pdf_path": Path("output/reports/example/GEO-REPORT.pdf"),
+                "workbook_pdf_path": Path("output/reports/example/GEO-STRATEGIST-WORKBOOK.pdf"),
             }
 
         def render_markdown_report(data):
@@ -133,6 +140,9 @@ class StrategyWorkflowTest(unittest.TestCase):
 
         def generate_report(data, output_path):
             calls.append(("generate_report", output_path, data["brand_name"]))
+
+        def generate_workbook_report(data, output_path):
+            calls.append(("generate_workbook_report", output_path, data["brand_name"]))
 
         class FakeReport:
             def __init__(self):
@@ -186,10 +196,12 @@ class StrategyWorkflowTest(unittest.TestCase):
             build_combined_audit_data=build_combined_audit_data,
             build_output_paths=build_output_paths,
             build_report_sections=build_report_sections,
+            build_client_report_sections=build_client_report_sections,
             render_markdown_report=render_markdown_report,
             write_text=write_text,
             write_json=write_json,
             generate_report=generate_report,
+            generate_workbook_report=generate_workbook_report,
             orchestrator_cls=FakeStrategyOrchestrator,
         )
 
@@ -199,6 +211,13 @@ class StrategyWorkflowTest(unittest.TestCase):
         self.assertTrue(any(call[0] == "write_text" for call in calls))
         self.assertTrue(any(call[0] == "write_json" for call in calls))
         self.assertTrue(any(call[0] == "generate_report" for call in calls))
+        self.assertTrue(any(call[0] == "generate_workbook_report" for call in calls))
+        self.assertTrue(any(call[0] == "build_client_report_sections" for call in calls))
+        self.assertEqual(result["pdf_path"], str(Path("output/reports/example/GEO-REPORT.pdf")))
+        self.assertEqual(
+            result["workbook_pdf_path"],
+            str(Path("output/reports/example/GEO-STRATEGIST-WORKBOOK.pdf")),
+        )
 
 
 if __name__ == "__main__":
