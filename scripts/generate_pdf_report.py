@@ -47,7 +47,7 @@ try:
     from reportlab.graphics.charts.piecharts import Pie
     from reportlab.graphics import renderPDF
 except ImportError:
-    print("ERROR: ReportLab is required. Run: pip install reportlab")
+    print("ERROR: Required packages not installed. Run: pip install -r requirements.txt")
     sys.exit(1)
 
 try:
@@ -1278,8 +1278,205 @@ def generate_workbook_report(data, output_path="GEO-STRATEGIST-WORKBOOK.pdf"):
         elements.append(Paragraph(paragraph_text(overview), styles["BodyText_Custom"]))
         elements.append(Spacer(1, 8))
 
-    if isinstance(decision_summary, Mapping):
-        pass
+    # Score gauge
+    gauge = create_score_gauge(geo_score, 200, 200)
+    elements.append(gauge)
+
+    elements.append(Spacer(1, 20))
+
+    # Score label
+    score_color = get_score_color(geo_score)
+    elements.append(Paragraph(
+        f'<font color="{score_color.hexval()}">{get_score_label(geo_score)}</font>',
+        ParagraphStyle('ScoreLabelColored', parent=styles['SectionHeader'],
+                       alignment=TA_CENTER, fontSize=20)
+    ))
+
+    elements.append(PageBreak())
+
+    # ============================================================
+    # EXECUTIVE SUMMARY
+    # ============================================================
+    elements.append(Paragraph("Executive Summary", styles['SectionHeader']))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=12))
+
+    if executive_summary:
+        elements.append(Paragraph(executive_summary, styles['BodyText_Custom']))
+    else:
+        elements.append(Paragraph(
+            f"This report presents the findings of a comprehensive Generative Engine Optimization (GEO) "
+            f"audit conducted on <b>{brand_name}</b> ({url}). The analysis evaluated the website's readiness "
+            f"for AI-powered search engines including Google AI Overviews, ChatGPT, Perplexity, Gemini, "
+            f"and Bing Copilot. The overall GEO Readiness Score is <b>{geo_score}/100</b>, "
+            f"placing the site in the <b>{get_score_label(geo_score)}</b> tier.",
+            styles['BodyText_Custom']
+        ))
+
+    elements.append(Spacer(1, 16))
+
+    # ============================================================
+    # SCORE BREAKDOWN
+    # ============================================================
+    elements.append(Paragraph("GEO Score Breakdown", styles['SectionHeader']))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=12))
+
+    score_data = [
+        ["Component", "Score", "Weight", "Weighted"],
+        ["AI Citability & Visibility", f"{ai_citability}/100", "25%", f"{round(ai_citability * 0.25, 1)}"],
+        ["Brand Authority Signals", f"{brand_authority}/100", "20%", f"{round(brand_authority * 0.20, 1)}"],
+        ["Content Quality & E-E-A-T", f"{content_eeat}/100", "20%", f"{round(content_eeat * 0.20, 1)}"],
+        ["Technical Foundations", f"{technical}/100", "15%", f"{round(technical * 0.15, 1)}"],
+        ["Structured Data", f"{schema_score}/100", "10%", f"{round(schema_score * 0.10, 1)}"],
+        ["Platform Optimization", f"{platform_optimization}/100", "10%", f"{round(platform_optimization * 0.10, 1)}"],
+        ["OVERALL", f"{geo_score}/100", "100%", f"{geo_score}"],
+    ]
+
+    score_table = Table(score_data, colWidths=[200, 80, 60, 80])
+    style = make_table_style()
+
+    # Bold the last row
+    style.add('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold')
+    style.add('BACKGROUND', (0, -1), (-1, -1), MEDIUM_BG)
+
+    # Color-code score cells
+    for i in range(1, len(score_data) - 1):
+        score_val = int(score_data[i][1].split("/")[0])
+        color = get_score_color(score_val)
+        style.add('TEXTCOLOR', (1, i), (1, i), color)
+
+    score_table.setStyle(style)
+    elements.append(score_table)
+
+    elements.append(Spacer(1, 16))
+
+    # Score bar chart
+    chart_scores = [ai_citability, brand_authority, content_eeat, technical, schema_score, platform_optimization]
+    chart_labels = ["Citability", "Brand", "Content", "Technical", "Schema", "Platform"]
+    elements.append(create_bar_chart(chart_scores, chart_labels))
+
+    elements.append(PageBreak())
+
+    # ============================================================
+    # AI PLATFORM READINESS
+    # ============================================================
+    elements.append(Paragraph("AI Platform Readiness", styles['SectionHeader']))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=12))
+
+    elements.append(Paragraph(
+        "These scores reflect how likely your content is to be cited by each AI search platform. "
+        "A score below 50 indicates significant barriers to citation on that platform.",
+        styles['BodyText_Custom']
+    ))
+    elements.append(Spacer(1, 10))
+
+    # Platform chart
+    if platforms:
+        elements.append(create_platform_chart(platforms))
+
+    elements.append(Spacer(1, 10))
+
+    # Platform table
+    platform_table_data = [["AI Platform", "Score", "Status"]]
+    for name, score in platforms.items():
+        status = get_score_label(score)
+        platform_table_data.append([name, f"{score}/100", status])
+
+    pt = Table(platform_table_data, colWidths=[180, 80, 150])
+    pt_style = make_table_style()
+    for i in range(1, len(platform_table_data)):
+        score_val = int(platform_table_data[i][1].split("/")[0])
+        color = get_score_color(score_val)
+        pt_style.add('TEXTCOLOR', (1, i), (1, i), color)
+    pt.setStyle(pt_style)
+    elements.append(pt)
+
+    elements.append(PageBreak())
+
+    # ============================================================
+    # AI CRAWLER ACCESS
+    # ============================================================
+    elements.append(Paragraph("AI Crawler Access Status", styles['SectionHeader']))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=12))
+
+    elements.append(Paragraph(
+        "Blocking AI crawlers prevents AI platforms from citing your content. "
+        "The table below shows which AI crawlers can currently access your site.",
+        styles['BodyText_Custom']
+    ))
+    elements.append(Spacer(1, 8))
+
+    if crawler_access:
+        # Use Paragraph objects for text wrapping in cells
+        cell_style = ParagraphStyle(
+            'CrawlerCell', fontName='Helvetica', fontSize=9,
+            textColor=TEXT_PRIMARY, leading=12,
+        )
+        header_cell_style = ParagraphStyle(
+            'CrawlerHeaderCell', fontName='Helvetica-Bold', fontSize=9,
+            textColor=WHITE, leading=12,
+        )
+        status_style_allowed = ParagraphStyle(
+            'StatusAllowed', fontName='Helvetica-Bold', fontSize=9,
+            textColor=SUCCESS, leading=12,
+        )
+        status_style_blocked = ParagraphStyle(
+            'StatusBlocked', fontName='Helvetica-Bold', fontSize=9,
+            textColor=DANGER, leading=12,
+        )
+        status_style_restricted = ParagraphStyle(
+            'StatusRestricted', fontName='Helvetica-Bold', fontSize=9,
+            textColor=WARNING, leading=12,
+        )
+        status_style_default = ParagraphStyle(
+            'StatusDefault', fontName='Helvetica', fontSize=9,
+            textColor=TEXT_PRIMARY, leading=12,
+        )
+
+        crawler_data = [[
+            Paragraph("Crawler", header_cell_style),
+            Paragraph("Platform", header_cell_style),
+            Paragraph("Status", header_cell_style),
+            Paragraph("Recommendation", header_cell_style),
+        ]]
+        for crawler_name, info in crawler_access.items():
+            if isinstance(info, dict):
+                status_text = info.get("status", "Unknown")
+                status_upper = status_text.upper()
+                if "ALLOW" in status_upper:
+                    s_style = status_style_allowed
+                elif "BLOCK" in status_upper:
+                    s_style = status_style_blocked
+                elif "RESTRICT" in status_upper:
+                    s_style = status_style_restricted
+                else:
+                    s_style = status_style_default
+
+                crawler_data.append([
+                    Paragraph(crawler_name, cell_style),
+                    Paragraph(info.get("platform", ""), cell_style),
+                    Paragraph(status_text, s_style),
+                    Paragraph(info.get("recommendation", ""), cell_style),
+                ])
+            else:
+                crawler_data.append([
+                    Paragraph(crawler_name, cell_style),
+                    Paragraph("", cell_style),
+                    Paragraph(str(info), cell_style),
+                    Paragraph("", cell_style),
+                ])
+
+        # Full page width: letter (612pt) - 50pt margins each side = 512pt
+        ct = Table(crawler_data, colWidths=[90, 110, 72, 240])
+        ct_style = make_table_style()
+        ct_style.add('VALIGN', (0, 0), (-1, -1), 'TOP')
+
+        ct.setStyle(ct_style)
+        elements.append(ct)
+    else:
+        elements.append(Paragraph(
+            "<i>Run /geo crawlers to populate this section with AI crawler access data.</i>",
+            styles['BodyText_Custom']
+        ))
 
     elements.append(PageBreak())
     if isinstance(report_sections, Mapping):

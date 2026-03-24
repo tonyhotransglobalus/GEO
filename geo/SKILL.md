@@ -37,6 +37,9 @@ allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write
 | `/geo report-pdf <url>` | Legacy alias for the strategist report flow |
 | `/geo report <url>` | Legacy generic GEO deliverable path |
 | `/geo quick <url>` | 60-second GEO visibility snapshot |
+| `/geo prospect <cmd>` | CRM-lite: manage prospects through the sales pipeline |
+| `/geo proposal <domain>` | Auto-generate client proposal from audit data |
+| `/geo compare <domain>` | Monthly delta report: show score improvements to client |
 
 ---
 
@@ -136,6 +139,9 @@ Adjust recommendations based on detected type. Local businesses need LocalBusine
 | 8 | geo-technical | `skills/geo-technical/` | Technical SEO foundations |
 | 9 | geo-content | `skills/geo-content/` | Content quality and E-E-A-T |
 | 10 | geo-report | `skills/geo-report/` | Client-ready deliverable generation |
+| 11 | geo-prospect | `skills/geo-prospect/` | CRM-lite prospect and client pipeline management |
+| 12 | geo-proposal | `skills/geo-proposal/` | Auto-generate client proposals from audit data |
+| 13 | geo-compare | `skills/geo-compare/` | Monthly delta tracking and progress reports |
 
 ---
 
@@ -171,6 +177,9 @@ All commands generate structured output:
 | `/geo strategy-report` | `output/pdf/GEO-REPORT-<Brand>-<date>.pdf` |
 | `/geo report-pdf` | `output/pdf/GEO-REPORT-<Brand>-<date>.pdf` |
 | `/geo quick` | Inline summary (no file) |
+| `/geo prospect` | Updates `~/.geo-prospects/prospects.json` |
+| `/geo proposal` | `~/.geo-prospects/proposals/<domain>-proposal-<date>.md` |
+| `/geo compare` | `~/.geo-prospects/reports/<domain>-monthly-<YYYY-MM>.md` |
 
 ---
 

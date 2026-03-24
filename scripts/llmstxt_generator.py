@@ -18,7 +18,7 @@ try:
     import requests
     from bs4 import BeautifulSoup
 except ImportError:
-    print("ERROR: Required packages not installed. Run: pip install requests beautifulsoup4")
+    print("ERROR: Required packages not installed. Run: pip install -r requirements.txt")
     sys.exit(1)
 
 DEFAULT_HEADERS = {
@@ -187,7 +187,7 @@ def generate_llmstxt(url: str, max_pages: int = 30) -> dict:
         # Categorize
         page_entry = {"url": href, "title": link_text}
 
-        if any(kw in path for kw in ["/pricing", "/features", "/product", "/solutions", "/demo"]):
+        if any(kw in path for kw in ["/pricing", "/feature", "/product", "/solution", "/demo"]):
             pages["Products & Services"].append(page_entry)
         elif any(kw in path for kw in ["/blog", "/article", "/resource", "/guide", "/learn", "/docs", "/documentation"]):
             pages["Resources & Blog"].append(page_entry)
