@@ -12,34 +12,33 @@ import argparse
 import json
 
 try:
-    from .brand_scanner import generate_brand_report
-    from .citability_scorer import analyze_page_citability
-    from .fetch_page import crawl_sitemap, fetch_llms_txt, fetch_page, fetch_robots_txt
-    from .generate_pdf_report import generate_report, generate_workbook_report
-    from .llmstxt_generator import validate_llmstxt
-    from .strategy_engine.artifacts import (
-        build_combined_audit_data,
-        build_output_paths,
-        extract_brand_name,
-        write_json,
-        write_text,
-    )
-    from .strategy_engine.markdown import render_markdown_report
     from .strategy_engine import (
         StrategyOrchestrator,
-        build_client_report_sections,
-        build_report_sections,
-    )
-    from .strategy_engine.summary import (
+        StrategyWorkflowDependencies,
+        analyze_page_citability,
         build_action_lists,
+        build_client_report_sections,
+        build_combined_audit_data,
         build_crawler_access,
         build_executive_summary,
         build_findings,
+        build_output_paths,
+        build_playbook_report_sections,
+        build_report_sections,
         build_rescience_pass,
-    )
-    from .strategy_engine.workflow import (
-        StrategyWorkflowDependencies,
+        crawl_sitemap,
+        extract_brand_name,
+        fetch_llms_txt,
+        fetch_page,
+        fetch_robots_txt,
+        generate_brand_report,
+        generate_report,
+        generate_workbook_report,
+        render_markdown_report,
         run_strategy_report,
+        validate_llmstxt,
+        write_json,
+        write_text,
     )
     from .strategy_engine.plugins.competitive import (
         CitationDiagnosisPlugin,
@@ -54,34 +53,33 @@ try:
         SerpAnalysisPlugin,
     )
 except ImportError:
-    from brand_scanner import generate_brand_report
-    from citability_scorer import analyze_page_citability
-    from fetch_page import crawl_sitemap, fetch_llms_txt, fetch_page, fetch_robots_txt
-    from generate_pdf_report import generate_report, generate_workbook_report
-    from llmstxt_generator import validate_llmstxt
-    from strategy_engine.artifacts import (
-        build_combined_audit_data,
-        build_output_paths,
-        extract_brand_name,
-        write_json,
-        write_text,
-    )
-    from strategy_engine.markdown import render_markdown_report
     from strategy_engine import (
         StrategyOrchestrator,
-        build_client_report_sections,
-        build_report_sections,
-    )
-    from strategy_engine.summary import (
+        StrategyWorkflowDependencies,
+        analyze_page_citability,
         build_action_lists,
+        build_client_report_sections,
+        build_combined_audit_data,
         build_crawler_access,
         build_executive_summary,
         build_findings,
+        build_output_paths,
+        build_playbook_report_sections,
+        build_report_sections,
         build_rescience_pass,
-    )
-    from strategy_engine.workflow import (
-        StrategyWorkflowDependencies,
+        crawl_sitemap,
+        extract_brand_name,
+        fetch_llms_txt,
+        fetch_page,
+        fetch_robots_txt,
+        generate_brand_report,
+        generate_report,
+        generate_workbook_report,
+        render_markdown_report,
         run_strategy_report,
+        validate_llmstxt,
+        write_json,
+        write_text,
     )
     from strategy_engine.plugins.competitive import (
         CitationDiagnosisPlugin,
@@ -115,6 +113,7 @@ def build_workflow_dependencies() -> StrategyWorkflowDependencies:
         build_output_paths=build_output_paths,
         build_report_sections=build_report_sections,
         build_client_report_sections=build_client_report_sections,
+        build_playbook_report_sections=build_playbook_report_sections,
         render_markdown_report=render_markdown_report,
         write_text=write_text,
         write_json=write_json,

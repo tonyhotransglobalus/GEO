@@ -927,7 +927,7 @@ class ReportSectionsBuilderTest(unittest.TestCase):
         self.assertIn("Live Site", source_tags)
         self.assertIn("Heuristic", source_tags)
 
-        from scripts.generate_pdf_report import _report_item_text
+        from scripts.strategy_engine.pdf import _report_item_text
         from scripts.strategy_engine.reporting import report_sections_to_markdown
 
         markdown = report_sections_to_markdown(sections)
@@ -944,7 +944,7 @@ class ReportSectionsBuilderTest(unittest.TestCase):
         self.assertEqual(evidence_source_tag("live serp"), "Live SERP")
         self.assertEqual(evidence_source_tag("heuristic"), "Heuristic")
 
-        from scripts.generate_pdf_report import EVIDENCE_APPENDIX_TITLE as pdf_title
+        from scripts.strategy_engine.pdf import EVIDENCE_APPENDIX_TITLE as pdf_title
         from scripts.strategy_engine.reporting import EVIDENCE_APPENDIX_TITLE as markdown_title
 
         self.assertEqual(markdown_title, pdf_title)
@@ -1044,7 +1044,7 @@ class ReportSectionsBuilderTest(unittest.TestCase):
         self.assertIn("Official", rendered)
         self.assertIn("Recommendation: Keep accessible with a clearly documented policy.", rendered)
 
-        from scripts.generate_pdf_report import _report_item_text
+        from scripts.strategy_engine.pdf import _report_item_text
 
         self.assertIn("Recommendation: Keep accessible with a clearly documented policy.", _report_item_text(official_items[0]))
 

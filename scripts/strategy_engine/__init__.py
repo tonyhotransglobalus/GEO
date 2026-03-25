@@ -50,10 +50,16 @@ from .artifacts import (
 from .markdown import render_markdown_report
 from .reporting import (
     build_client_report_sections,
+    build_playbook_report_sections,
     build_report_sections,
     report_sections_to_markdown,
 )
 from .workflow import StrategyWorkflowDependencies, run_strategy_report
+from .brand import generate_brand_report
+from .citability import analyze_page_citability
+from .fetch import crawl_sitemap, fetch_llms_txt, fetch_page, fetch_robots_txt
+from .llmstxt import validate_llmstxt
+from .pdf import generate_report, generate_workbook_report
 
 __all__ = [
     "AnalysisContext",
@@ -103,4 +109,13 @@ __all__ = [
     "slugify",
     "write_json",
     "write_text",
+    "generate_brand_report",
+    "analyze_page_citability",
+    "crawl_sitemap",
+    "fetch_llms_txt",
+    "fetch_page",
+    "fetch_robots_txt",
+    "validate_llmstxt",
+    "generate_report",
+    "generate_workbook_report",
 ]

@@ -1428,6 +1428,134 @@ def _client_methodology(report_model: ReportModel, audit_data: Mapping[str, Any]
     }
 
 
+def build_playbook_report_sections(
+    report_model: ReportModel,
+    audit_data: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    context = _get_report_context(report_model, audit_data or {})
+
+    sections = {
+        "page1_executive_summary": _build_page1_executive_summary(report_model, context),
+        "page2_geo_paradigm": _build_page2_geo_paradigm(report_model, context),
+        "page3_strategic_implementation": _build_page3_strategic_implementation(report_model, context),
+        "page4_content_citability": _build_page4_content_citability(report_model, context),
+        "page5_brand_entity_verification": _build_page5_brand_entity_verification(report_model, context),
+        "page6_technical_implementation": _build_page6_technical_implementation(report_model, context),
+        "page7_audit_process": _build_page7_audit_process(report_model, context),
+        "page8_diagnosis_troubleshooting": _build_page8_diagnosis_troubleshooting(report_model, context),
+        "page9_faq_by_role": _build_page9_faq_by_role(report_model, context),
+        "page10_roadmap_future": _build_page10_roadmap_future(report_model, context),
+    }
+    return serialize_model({key: sections[key] for key in PLAYBOOK_REPORT_SECTION_ORDER})
+
+
+def _build_page1_executive_summary(report_model: ReportModel, context: dict[str, Any]) -> dict[str, Any]:
+    exec_summary = _build_executive_summary(report_model, context)
+    readiness = _build_readiness_scorecard(context)
+    return {
+        "brand_name": report_model.brand_name,
+        "geo_score": readiness.get("geo_score"),
+        "overview": exec_summary.get("overview"),
+        "key_takeaways": exec_summary.get("key_takeaways"),
+    }
+
+
+def _build_page2_geo_paradigm(report_model: ReportModel, context: dict[str, Any]) -> dict[str, Any]:
+    technical = _build_technical_geo_gates(report_model, context)
+    return {
+        "funnel_status": {
+            "crawl": "allowed" if any("Allow" in _string(c.get("status")) for c in technical.get("crawler_access", {}).values() if isinstance(c, Mapping)) else "blocked",
+            "index": "ready" if len(_sequence(context.get("page_data", {}).get("h1_tags"))) == 1 else "needs_work",
+            "retrieval": "supported" if _int_score(_mapping(_mapping(context.get("geo_scores")).get("scores")).get("ai_citability")) >= 60 else "limited",
+        },
+        "pillars": technical.get("priority_gates"),
+    }
+
+
+def _build_page3_strategic_implementation(report_model: ReportModel, context: dict[str, Any]) -> dict[str, Any]:
+    query_universe = _build_query_universe(report_model, context)
+    rescience_pass = _mapping(context.get("rescience_pass"))
+    return {
+        "service_line_themes": query_universe.get("service_lines"),
+        "answer_blocks_status": "present" if rescience_pass.get("geo_methods") else "missing",
+        "recommended_methods": rescience_pass.get("geo_methods"),
+    }
+
+
+def _build_page4_content_citability(report_model: ReportModel, context: dict[str, Any]) -> dict[str, Any]:
+    diagnosis = _build_citation_diagnosis(report_model, context)
+    scores = _mapping(_mapping(context.get("geo_scores")).get("scores"))
+    return {
+        "citability_score": _int_score(scores.get("ai_citability")),
+        "failures": diagnosis.get("failures"),
+        "checklist_status": {
+            "claim_clarity": _int_score(scores.get("ai_citability")),
+            "fact_density": _int_score(scores.get("content_eeat")),
+            "structural_readiness": 100 if len(_sequence(context.get("page_data", {}).get("h1_tags"))) == 1 else 50,
+        },
+    }
+
+
+def _build_page5_brand_entity_verification(report_model: ReportModel, context: dict[str, Any]) -> dict[str, Any]:
+    trust_graph = _build_entity_trust_graph(report_model, context)
+    return {
+        "entity_name": report_model.brand_name,
+        "knowledge_graph_confidence": trust_graph.get("analysis", {}).get("confidence"),
+        "profile_links": trust_graph.get("profile_links"),
+        "trust_signals": trust_graph.get("trust_signals"),
+    }
+
+
+def _build_page6_technical_implementation(report_model: ReportModel, context: dict[str, Any]) -> dict[str, Any]:
+    technical = _build_technical_geo_gates(report_model, context)
+    llms_validation = _mapping(context.get("llms_validation"))
+    return {
+        "llms_txt_exists": llms_validation.get("exists"),
+        "crawler_access": technical.get("crawler_access"),
+        "ssr_status": context.get("page_data", {}).get("has_ssr_content", True),
+        "schema_score": _int_score(_mapping(_mapping(context.get("geo_scores")).get("scores")).get("schema")),
+    }
+
+
+def _build_page7_audit_process(report_model: ReportModel, context: dict[str, Any]) -> dict[str, Any]:
+    readiness = _build_readiness_scorecard(context)
+    return {
+        "geo_score": readiness.get("geo_score"),
+        "components": readiness.get("components"),
+        "platforms": readiness.get("platforms"),
+    }
+
+
+def _build_page8_diagnosis_troubleshooting(report_model: ReportModel, context: dict[str, Any]) -> dict[str, Any]:
+    readiness = _build_readiness_scorecard(context)
+    diagnosis = _build_citation_diagnosis(report_model, context)
+    return {
+        "visibility_issues": readiness.get("priority_risks"),
+        "citation_failures": diagnosis.get("failures"),
+        "troubleshooting_notes": [
+            "Check robots.txt if GPTBot visibility is zero.",
+            "Review H1 structure if main thesis is not recognized.",
+            "Add llms.txt if the site structure is complex.",
+        ],
+    }
+
+
+def _build_page9_faq_by_role(report_model: ReportModel, context: dict[str, Any]) -> dict[str, Any]:
+    exec_summary = _build_executive_summary(report_model, context)
+    return {
+        "role_summaries": exec_summary.get("by_audience"),
+    }
+
+
+def _build_page10_roadmap_future(report_model: ReportModel, context: dict[str, Any]) -> dict[str, Any]:
+    roadmap = _build_roadmap(report_model, context)
+    return {
+        "thirty_day": roadmap.get("thirty_day"),
+        "sixty_day": roadmap.get("sixty_day"),
+        "ninety_day": roadmap.get("ninety_day"),
+    }
+
+
 def build_client_report_sections(
     report_model: ReportModel,
     audit_data: Mapping[str, Any] | None = None,

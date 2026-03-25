@@ -197,6 +197,7 @@ class StrategyWorkflowTest(unittest.TestCase):
             build_output_paths=build_output_paths,
             build_report_sections=build_report_sections,
             build_client_report_sections=build_client_report_sections,
+            build_playbook_report_sections=build_client_report_sections,
             render_markdown_report=render_markdown_report,
             write_text=write_text,
             write_json=write_json,

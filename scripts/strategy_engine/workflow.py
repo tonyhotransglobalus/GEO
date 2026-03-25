@@ -40,6 +40,7 @@ class StrategyWorkflowDependencies:
     build_output_paths: Callable[[str, str], dict[str, Path]]
     build_report_sections: Callable[[Any, Mapping[str, Any]], dict]
     build_client_report_sections: Callable[[Any, Mapping[str, Any]], dict]
+    build_playbook_report_sections: Callable[[Any, Mapping[str, Any]], dict]
     render_markdown_report: Callable[[dict], str]
     write_text: Callable[[Path, str], None]
     write_json: Callable[[Path, dict], None]

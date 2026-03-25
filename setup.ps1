@@ -81,9 +81,9 @@ $checks = @(
     @{ Path = (Join-Path $ProjectRoot "geo\SKILL.md"); Label = "Main GEO skill" },
     @{ Path = (Join-Path $ProjectRoot "skills\geo-audit\SKILL.md"); Label = "Audit sub-skill" },
     @{ Path = (Join-Path $ProjectRoot "scripts\full_audit.py"); Label = "Hybrid orchestrator" },
-    @{ Path = (Join-Path $ProjectRoot "scripts\fetch_page.py"); Label = "Fetch script" },
-    @{ Path = (Join-Path $ProjectRoot "scripts\citability_scorer.py"); Label = "Citability scorer" },
-    @{ Path = (Join-Path $ProjectRoot "scripts\generate_pdf_report.py"); Label = "PDF generator" }
+    @{ Path = (Join-Path $ProjectRoot "scripts\strategy_engine\fetch.py"); Label = "Fetch script" },
+    @{ Path = (Join-Path $ProjectRoot "scripts\strategy_engine\citability.py"); Label = "Citability scorer" },
+    @{ Path = (Join-Path $ProjectRoot "scripts\strategy_engine\pdf.py"); Label = "PDF generator" }
 )
 
 $allOk = $true

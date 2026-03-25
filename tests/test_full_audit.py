@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from reportlab.platypus import Paragraph
 
-from scripts.generate_pdf_report import (
+from scripts.strategy_engine.pdf import (
     generate_report,
     generate_workbook_report,
     wrap_table_rows,
@@ -1385,7 +1385,7 @@ class FullAuditHelpersTest(unittest.TestCase):
 
         widths = []
 
-        from scripts import generate_pdf_report as pdf_module
+        from scripts.strategy_engine import pdf as pdf_module
 
         original = pdf_module.build_wrapped_table
 
@@ -1399,7 +1399,7 @@ class FullAuditHelpersTest(unittest.TestCase):
                 header_color=header_color if header_color is not None else pdf_module.PRIMARY,
             )
 
-        with patch("scripts.generate_pdf_report.build_wrapped_table", side_effect=capture_widths):
+        with patch("scripts.strategy_engine.pdf.build_wrapped_table", side_effect=capture_widths):
             with tempfile.TemporaryDirectory() as temp_dir:
                 pdf_path = Path(temp_dir) / "report.pdf"
                 txt_path = Path(temp_dir) / "report.txt"
