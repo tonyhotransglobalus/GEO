@@ -52,6 +52,36 @@ def _build_result(status: str, reason: str, warning: str) -> dict:
     }
 
 
+def build_adjudication_inputs(*, manifest: dict[str, Any], evidence: dict[str, Any]) -> dict:
+    items = list(evidence.get("items") or [])
+    manifest_platforms = list(manifest.get("platforms") or [])
+    compare_to_v1 = bool(manifest.get("comparison_eligibility", {}).get("requested"))
+    eligible_to_compare = bool(manifest.get("comparison_eligibility", {}).get("eligible"))
+
+    return {
+        "benchmark": {
+            "competitor_rows": list(manifest.get("competitors") or []),
+            "sampled_queries": 0,
+            "winner_domains": [],
+        },
+        "prompt_proof": {
+            "prompt_rows": [],
+            "captured_prompts": 0,
+            "winner_urls": [],
+        },
+        "platform_breakdown": {
+            "platform_rows": manifest_platforms,
+            "sampled_platforms": len(manifest_platforms),
+            "direct_captures": sum(1 for item in items if item.get("platform")),
+        },
+        "change_since_last_run": {
+            "compare_to_v1": compare_to_v1,
+            "comparable_runs": eligible_to_compare,
+            "change_points": 0,
+        },
+    }
+
+
 def classify_benchmark_section(
     *,
     competitor_rows: list[Any],
@@ -172,6 +202,12 @@ def classify_change_since_last_run_section(
             "Comparison is not valid for this run.",
             "Change-since-last-run is omitted because the runs are not comparable.",
         )
+    if change_points == 0:
+        return _build_result(
+            "omitted",
+            "Comparison is eligible, but no comparable change points were captured.",
+            "Change-since-last-run is omitted because no comparable change points were captured.",
+        )
     if change_points >= ADJUDICATION_THRESHOLDS["change_since_last_run"]["decision_grade_changes"]:
         return _build_result(
             "decision-grade",
@@ -192,30 +228,19 @@ def classify_change_since_last_run_section(
 
 
 def adjudicate_v2_sections(*, manifest: dict[str, Any], evidence: dict[str, Any]) -> dict:
-    items = list(evidence.get("items") or [])
-    manifest_platforms = list(manifest.get("platforms") or [])
-    manifest_competitors = list(manifest.get("competitors") or [])
-    compare_to_v1 = bool(manifest.get("comparison_eligibility", {}).get("requested"))
+    inputs = build_adjudication_inputs(manifest=manifest, evidence=evidence)
 
     benchmark = classify_benchmark_section(
-        competitor_rows=manifest_competitors,
-        sampled_queries=len(items),
-        winner_domains=[],
+        **inputs["benchmark"],
     )
     prompt_proof = classify_prompt_proof_section(
-        prompt_rows=[item for item in items if item.get("evidence_type") == "plugin_results"],
-        captured_prompts=sum(1 for item in items if item.get("query_theme")),
-        winner_urls=[],
+        **inputs["prompt_proof"],
     )
     platform_breakdown = classify_platform_breakdown_section(
-        platform_rows=manifest_platforms,
-        sampled_platforms=len(manifest_platforms),
-        direct_captures=sum(1 for item in items if item.get("platform")),
+        **inputs["platform_breakdown"],
     )
     change_since_last_run = classify_change_since_last_run_section(
-        compare_to_v1=compare_to_v1,
-        comparable_runs=False,
-        change_points=0,
+        **inputs["change_since_last_run"],
     )
 
     return {

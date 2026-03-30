@@ -1,4 +1,5 @@
 from scripts.strategy_engine_v2.adjudication import (
+    build_adjudication_inputs,
     classify_benchmark_section,
     classify_change_since_last_run_section,
     classify_platform_breakdown_section,
@@ -51,3 +52,26 @@ def test_v2_workflow_includes_adjudication():
     result = run_strategy_report_v2("https://www.transglobalus.com/")
 
     assert "adjudication" in result
+
+
+def test_build_adjudication_inputs_keeps_placeholder_signals_conservative():
+    inputs = build_adjudication_inputs(
+        manifest={
+            "target_url": "https://www.transglobalus.com/",
+            "platforms": ["chatgpt"],
+            "competitors": ["example.com"],
+            "comparison_eligibility": {"requested": True, "eligible": True},
+        },
+        evidence={
+            "items": [
+                {"evidence_type": "page_fetch", "query_theme": "life insurance", "platform": "chatgpt"},
+                {"evidence_type": "plugin_results", "query_theme": "life insurance"},
+            ]
+        },
+    )
+
+    assert inputs["benchmark"]["sampled_queries"] == 0
+    assert inputs["prompt_proof"]["prompt_rows"] == []
+    assert inputs["prompt_proof"]["captured_prompts"] == 0
+    assert inputs["change_since_last_run"]["compare_to_v1"] is True
+    assert inputs["change_since_last_run"]["comparable_runs"] is True
