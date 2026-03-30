@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from .adjudication import adjudicate_v2_sections
 from .evidence import build_v2_evidence_ledger
 from .manifest import build_run_manifest
+from .markdown import MARKDOWN_FILENAME, render_v2_markdown_report
 from .reporting import build_v2_report_sections
 
 
@@ -40,6 +43,17 @@ def run_strategy_report_v2(
             "adjudication": adjudication,
         }
     )
+    markdown_report = render_v2_markdown_report(
+        {
+            "manifest": manifest,
+            "evidence": evidence,
+            "adjudication": adjudication,
+            "report_sections": report_sections,
+        }
+    )
+    markdown_path = Path(__file__).resolve().parents[2] / "output" / "reports" / MARKDOWN_FILENAME
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown_path.write_text(markdown_report, encoding="utf-8")
     return {
         "version": "v2",
         "manifest": manifest,
