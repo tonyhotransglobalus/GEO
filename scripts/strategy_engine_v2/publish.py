@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -35,6 +36,14 @@ def _seed_slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", seed).strip("-")
 
 
+def _run_suffix(value: str) -> str:
+    seed = _seed_slug(value)
+    digest = hashlib.sha1(value.encode("utf-8")).hexdigest()[:8]
+    if seed:
+        return f"{seed[:24].rstrip('-')}-{digest}"
+    return digest
+
+
 def _coerce_dir(value: Path | str | None) -> Path:
     if value is None:
         return DEFAULT_REPORTS_DIR
@@ -62,7 +71,10 @@ def build_v2_output_paths(
 ) -> dict[str, Path]:
     reports_dir = _coerce_dir(base_dir)
     report_slug = slugify(brand_name, fallback=run_seed or date_stamp)
-    report_dir = reports_dir / f"{report_slug}-{date_stamp}"
+    report_dir_name = f"{report_slug}-{date_stamp}"
+    if run_seed:
+        report_dir_name = f"{report_dir_name}-{_run_suffix(run_seed)}"
+    report_dir = reports_dir / report_dir_name
     return {
         "report_dir": report_dir,
         "markdown_path": report_dir / VERSIONED_MARKDOWN_FILENAME,

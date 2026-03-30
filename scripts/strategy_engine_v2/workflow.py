@@ -25,10 +25,21 @@ class PublishV2Artifacts(Protocol):
     ) -> dict[str, Path]: ...
 
 
-def build_rollout_metadata(*, shadow_run: bool, comparable_to_v1: bool) -> dict[str, Any]:
+def build_rollout_metadata(
+    *,
+    shadow_run: bool,
+    comparable_to_v1: bool | None = None,
+    comparison_eligible: bool | None = None,
+) -> dict[str, Any]:
+    if comparison_eligible is not None:
+        comparable = comparison_eligible
+    elif comparable_to_v1 is not None:
+        comparable = comparable_to_v1
+    else:
+        comparable = False
     return {
         "shadow_run": shadow_run,
-        "comparable_to_v1": comparable_to_v1,
+        "comparable_to_v1": bool(comparable),
         "promotion_ready": False,
         "promotion_owner": "TBD",
         "checklist_status": "pending",
@@ -101,16 +112,30 @@ def run_strategy_report_v2(
             "report_sections": report_sections,
         }
     )
+    comparison_eligibility = manifest.get("comparison_eligibility") or {}
+    comparable_to_v1 = bool(comparison_eligibility.get("eligible"))
     rollout_metadata = build_rollout_metadata(
         shadow_run=shadow_run,
-        comparable_to_v1=bool(manifest.get("comparison_eligibility", {}).get("requested")),
+        comparable_to_v1=bool(compare_to_v1),
+        comparison_eligible=comparable_to_v1,
     )
     target_domain = manifest.get("target_domain") or ""
     target_url = manifest.get("target_url") or ""
+    run_seed = "|".join(
+        value
+        for value in (
+            str(manifest.get("run_timestamp") or ""),
+            target_url or target_domain,
+            mode,
+            driver,
+            model or "",
+        )
+        if value
+    )
     artifact_paths = deps.publish_v2_artifacts(
         brand_name=target_domain or target_url or "",
         date_stamp=str(manifest.get("run_timestamp") or "")[:10] or "unknown-date",
-        run_seed=target_url or target_domain or str(manifest.get("run_timestamp") or ""),
+        run_seed=run_seed,
         payload={
             "manifest": manifest,
             "evidence": evidence,

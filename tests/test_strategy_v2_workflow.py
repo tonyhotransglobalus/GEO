@@ -233,7 +233,7 @@ def test_run_strategy_report_v2_returns_manifest_evidence_and_sections(tmp_path)
     ]
     publish_call = next(item for item in calls if item[0] == "publish_v2_artifacts")[1]
     assert publish_call["base_dir"] == tmp_path
-    assert publish_call["run_seed"] == "https://www.transglobalus.com/"
+    assert publish_call["run_seed"] == "2026-03-30T10:00:00+00:00|https://www.transglobalus.com/|script-only|script"
     assert publish_call["write_compat_markdown"] is False
     assert set(publish_call["payload"]) == {
         "manifest",

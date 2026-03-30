@@ -216,8 +216,26 @@ def test_v2_slugify_uses_run_seed_when_brand_name_is_missing(tmp_path):
         run_seed="https://www.transglobalus.com/",
     )
 
-    assert paths["report_dir"].name == "transglobalus-com-2026-03-30"
+    assert paths["report_dir"].name.startswith("transglobalus-com-2026-03-30-")
     assert "site" not in paths["report_dir"].name
+
+
+def test_v2_output_paths_use_run_seed_to_separate_same_day_runs(tmp_path):
+    first = build_v2_output_paths(
+        "TransGlobal Holding Company",
+        "2026-03-30",
+        base_dir=tmp_path,
+        run_seed="2026-03-30T10:00:00Z|https://www.transglobalus.com/",
+    )
+    second = build_v2_output_paths(
+        "TransGlobal Holding Company",
+        "2026-03-30",
+        base_dir=tmp_path,
+        run_seed="2026-03-30T11:00:00Z|https://www.transglobalus.com/",
+    )
+
+    assert first["report_dir"] != second["report_dir"]
+    assert first["report_dir"].name != second["report_dir"].name
 
 
 def test_publish_v2_artifacts_writes_manifest_evidence_and_comparison_metadata(tmp_path):
