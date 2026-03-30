@@ -48,4 +48,6 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
     assert result["status"] == "stub"
     assert result["manifest"]["shadow_run"] is True
     assert result["manifest"]["comparison_eligibility"]["requested"] is True
-    assert set(result) == {"manifest", "status", "version"}
+    assert set(result) == {"evidence", "manifest", "status", "version"}
+    assert result["evidence"]["count"] == 1
+    assert result["evidence"]["items"][0]["evidence_type"] == "run_manifest"

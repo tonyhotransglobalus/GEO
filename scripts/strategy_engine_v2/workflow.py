@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .evidence import build_v2_evidence_ledger
 from .manifest import build_run_manifest
 
 
@@ -28,8 +29,10 @@ def run_strategy_report_v2(
         compare_to_v1=compare_to_v1,
         shadow_run=shadow_run,
     )
+    evidence = build_v2_evidence_ledger(manifest=manifest)
     return {
         "version": "v2",
         "manifest": manifest,
+        "evidence": evidence,
         "status": "stub",
     }
