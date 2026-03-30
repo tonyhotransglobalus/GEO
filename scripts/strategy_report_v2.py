@@ -16,6 +16,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("url", help="Target website URL")
     parser.add_argument(
+        "--mode",
+        choices=("script-only", "agent-assisted"),
+        default="script-only",
+        help="Record whether the run is script-only or agent-assisted.",
+    )
+    parser.add_argument(
+        "--driver",
+        default="script",
+        help="Record which runner launched the report.",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Record the model identifier for agent-assisted runs.",
+    )
+    parser.add_argument(
         "--shadow-run",
         action="store_true",
         help="Run V2 in shadow mode without affecting V1 delivery.",
@@ -59,6 +75,9 @@ def main(argv: list[str] | None = None) -> dict:
         locale=args.locale,
         platforms=args.platform,
         competitors=args.competitor,
+        mode=args.mode,
+        driver=args.driver,
+        model=args.model,
         non_interactive=args.non_interactive,
     )
     print(json.dumps(result, indent=2))
