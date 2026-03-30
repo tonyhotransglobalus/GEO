@@ -52,6 +52,8 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
         "adjudication",
         "evidence",
         "manifest",
+        "qa",
+        "release_warnings",
         "report_sections",
         "status",
         "version",
@@ -64,6 +66,8 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
         "platform_breakdown",
         "prompt_proof",
     }
+    assert "issues" in result["qa"]
+    assert "warnings" in result["qa"]
     assert list(result["report_sections"].keys()) == [
         "leadership_summary",
         "score_explanations",

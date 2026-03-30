@@ -6,6 +6,7 @@ from .adjudication import adjudicate_v2_sections
 from .evidence import build_v2_evidence_ledger
 from .manifest import build_run_manifest
 from .markdown import MARKDOWN_FILENAME, render_v2_markdown_report
+from .qa import run_release_checks
 from .reporting import build_v2_report_sections
 
 
@@ -43,6 +44,14 @@ def run_strategy_report_v2(
             "adjudication": adjudication,
         }
     )
+    qa = run_release_checks(
+        {
+            "manifest": manifest,
+            "evidence": evidence,
+            "adjudication": adjudication,
+            "report_sections": report_sections,
+        }
+    )
     markdown_report = render_v2_markdown_report(
         {
             "manifest": manifest,
@@ -60,5 +69,7 @@ def run_strategy_report_v2(
         "evidence": evidence,
         "adjudication": adjudication,
         "report_sections": report_sections,
+        "qa": qa,
+        "release_warnings": list(qa.get("warnings") or []),
         "status": "stub",
     }
