@@ -5,7 +5,7 @@ from pathlib import Path
 from .adjudication import adjudicate_v2_sections
 from .evidence import build_v2_evidence_ledger
 from .manifest import build_run_manifest
-from .markdown import MARKDOWN_FILENAME, render_v2_markdown_report
+from .publish import publish_v2_artifacts
 from .qa import run_release_checks
 from .reporting import build_v2_report_sections
 
@@ -22,6 +22,7 @@ def run_strategy_report_v2(
     driver: str = "script",
     model: str | None = None,
     non_interactive: bool = False,
+    reports_dir: Path | None = None,
 ) -> dict:
     manifest = build_run_manifest(
         url=url,
@@ -52,17 +53,21 @@ def run_strategy_report_v2(
             "report_sections": report_sections,
         }
     )
-    markdown_report = render_v2_markdown_report(
-        {
+    target_domain = manifest.get("target_domain") or ""
+    target_url = manifest.get("target_url") or ""
+    artifact_paths = publish_v2_artifacts(
+        brand_name=target_domain or target_url or "",
+        date_stamp=str(manifest.get("run_timestamp") or "")[:10] or "unknown-date",
+        run_seed=target_url or target_domain or str(manifest.get("run_timestamp") or ""),
+        payload={
             "manifest": manifest,
             "evidence": evidence,
             "adjudication": adjudication,
+            "qa": qa,
             "report_sections": report_sections,
-        }
+        },
+        base_dir=reports_dir,
     )
-    markdown_path = Path(__file__).resolve().parents[2] / "output" / "reports" / MARKDOWN_FILENAME
-    markdown_path.parent.mkdir(parents=True, exist_ok=True)
-    markdown_path.write_text(markdown_report, encoding="utf-8")
     return {
         "version": "v2",
         "manifest": manifest,
@@ -71,5 +76,6 @@ def run_strategy_report_v2(
         "report_sections": report_sections,
         "qa": qa,
         "release_warnings": list(qa.get("warnings") or []),
+        "artifact_paths": {key: str(value) for key, value in artifact_paths.items()},
         "status": "stub",
     }

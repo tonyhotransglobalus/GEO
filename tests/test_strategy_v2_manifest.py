@@ -50,6 +50,7 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
     assert result["manifest"]["comparison_eligibility"]["requested"] is True
     assert set(result) == {
         "adjudication",
+        "artifact_paths",
         "evidence",
         "manifest",
         "qa",
@@ -68,6 +69,7 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
     }
     assert "issues" in result["qa"]
     assert "warnings" in result["qa"]
+    assert result["artifact_paths"]["markdown_path"].endswith("GEO-STRATEGY-REPORT-V2.md")
     assert list(result["report_sections"].keys()) == [
         "leadership_summary",
         "score_explanations",

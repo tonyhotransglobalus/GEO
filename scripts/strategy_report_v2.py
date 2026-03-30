@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 try:
     from .strategy_engine_v2.workflow import run_strategy_report_v2
@@ -63,6 +64,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Do not prompt during the run.",
     )
+    parser.add_argument(
+        "--reports-dir",
+        type=Path,
+        default=None,
+        help="Optional base directory for V2 report artifacts.",
+    )
     return parser.parse_args(argv)
 
 
@@ -79,6 +86,7 @@ def main(argv: list[str] | None = None) -> dict:
         driver=args.driver,
         model=args.model,
         non_interactive=args.non_interactive,
+        reports_dir=args.reports_dir,
     )
     print(json.dumps(result, indent=2))
     return result
