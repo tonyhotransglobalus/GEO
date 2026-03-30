@@ -48,7 +48,14 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
     assert result["status"] == "stub"
     assert result["manifest"]["shadow_run"] is True
     assert result["manifest"]["comparison_eligibility"]["requested"] is True
-    assert set(result) == {"adjudication", "evidence", "manifest", "status", "version"}
+    assert set(result) == {
+        "adjudication",
+        "evidence",
+        "manifest",
+        "report_sections",
+        "status",
+        "version",
+    }
     assert result["evidence"]["count"] == 1
     assert result["evidence"]["items"][0]["evidence_type"] == "run_manifest"
     assert set(result["adjudication"]) == {
@@ -57,3 +64,13 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
         "platform_breakdown",
         "prompt_proof",
     }
+    assert list(result["report_sections"].keys()) == [
+        "leadership_summary",
+        "score_explanations",
+        "priority_findings",
+        "competitive_benchmark",
+        "platform_breakdown",
+        "page_source_evidence",
+        "action_plan",
+        "proof_appendix",
+    ]
