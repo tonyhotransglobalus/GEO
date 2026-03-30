@@ -212,6 +212,13 @@ def test_run_strategy_report_v2_returns_manifest_evidence_and_sections(tmp_path)
     ]
     assert result["release_warnings"] == result["qa"]["warnings"]
     assert "benchmark_thinness" in result["qa"]["issues"]
+    assert result["rollout_metadata"] == {
+        "shadow_run": True,
+        "comparable_to_v1": True,
+        "promotion_ready": False,
+        "promotion_owner": "TBD",
+        "checklist_status": "pending",
+    }
     assert Path(result["artifact_paths"]["markdown_path"]).name == "GEO-STRATEGY-REPORT-V2.md"
     assert Path(result["artifact_paths"]["manifest_path"]).name == "GEO-STRATEGY-REPORT-V2.manifest.json"
     assert Path(result["artifact_paths"]["evidence_path"]).name == "GEO-STRATEGY-REPORT-V2.evidence.json"
@@ -234,4 +241,5 @@ def test_run_strategy_report_v2_returns_manifest_evidence_and_sections(tmp_path)
         "adjudication",
         "qa",
         "report_sections",
+        "rollout_metadata",
     }

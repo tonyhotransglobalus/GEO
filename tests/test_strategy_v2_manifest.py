@@ -56,8 +56,16 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
         "qa",
         "release_warnings",
         "report_sections",
+        "rollout_metadata",
         "status",
         "version",
+    }
+    assert result["rollout_metadata"] == {
+        "shadow_run": True,
+        "comparable_to_v1": True,
+        "promotion_ready": False,
+        "promotion_owner": "TBD",
+        "checklist_status": "pending",
     }
     assert result["evidence"]["count"] == 1
     assert result["evidence"]["items"][0]["evidence_type"] == "run_manifest"

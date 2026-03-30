@@ -25,6 +25,16 @@ class PublishV2Artifacts(Protocol):
     ) -> dict[str, Path]: ...
 
 
+def build_rollout_metadata(*, shadow_run: bool, comparable_to_v1: bool) -> dict[str, Any]:
+    return {
+        "shadow_run": shadow_run,
+        "comparable_to_v1": comparable_to_v1,
+        "promotion_ready": False,
+        "promotion_owner": "TBD",
+        "checklist_status": "pending",
+    }
+
+
 @dataclass(slots=True)
 class StrategyV2WorkflowDependencies:
     build_run_manifest: Callable[..., dict]
@@ -91,6 +101,10 @@ def run_strategy_report_v2(
             "report_sections": report_sections,
         }
     )
+    rollout_metadata = build_rollout_metadata(
+        shadow_run=shadow_run,
+        comparable_to_v1=bool(manifest.get("comparison_eligibility", {}).get("requested")),
+    )
     target_domain = manifest.get("target_domain") or ""
     target_url = manifest.get("target_url") or ""
     artifact_paths = deps.publish_v2_artifacts(
@@ -103,6 +117,7 @@ def run_strategy_report_v2(
             "adjudication": adjudication,
             "qa": qa,
             "report_sections": report_sections,
+            "rollout_metadata": rollout_metadata,
         },
         base_dir=reports_dir,
         write_compat_markdown=not shadow_run,
@@ -114,6 +129,7 @@ def run_strategy_report_v2(
         "adjudication": adjudication,
         "report_sections": report_sections,
         "qa": qa,
+        "rollout_metadata": rollout_metadata,
         "release_warnings": list(qa.get("warnings") or []),
         "artifact_paths": {key: str(value) for key, value in artifact_paths.items()},
         "status": "stub",
