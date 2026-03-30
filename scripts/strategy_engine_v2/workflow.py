@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .adjudication import adjudicate_v2_sections
 from .evidence import build_v2_evidence_ledger
 from .manifest import build_run_manifest
 
@@ -30,9 +31,11 @@ def run_strategy_report_v2(
         shadow_run=shadow_run,
     )
     evidence = build_v2_evidence_ledger(manifest=manifest)
+    adjudication = adjudicate_v2_sections(manifest=manifest, evidence=evidence)
     return {
         "version": "v2",
         "manifest": manifest,
         "evidence": evidence,
+        "adjudication": adjudication,
         "status": "stub",
     }
