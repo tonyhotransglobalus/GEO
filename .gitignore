@@ -29,12 +29,17 @@ env/
 *.log
 
 # Output files (generated reports - may contain sensitive client data)
+.worktrees/
 /GEO-*.md
 /GEO-*.pdf
 *.pdf
 /llms.txt
 /llms-full.txt
 /audit-data*.json
+/audit_output.json
+/google_audit.json
+/output/guidance/
+/output/reports/
 
 # Credentials and secrets (never commit these)
 *.key
