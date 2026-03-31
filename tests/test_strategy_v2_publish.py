@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import stat
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.strategy_engine_v2.publish import (
     DEFAULT_REPORTS_DIR,
@@ -153,9 +155,12 @@ def test_v2_shadow_run_writes_versioned_outputs(tmp_path):
     )
 
     assert paths["markdown_path"].name == "GEO-STRATEGY-REPORT-V2.md"
+    assert paths["pdf_path"].name == "GEO-STRATEGY-REPORT-V2.pdf"
     assert paths["manifest_path"].name == "GEO-STRATEGY-REPORT-V2.manifest.json"
     assert paths["evidence_path"].name == "GEO-STRATEGY-REPORT-V2.evidence.json"
     assert paths["comparison_metadata_path"].name == "GEO-STRATEGY-REPORT-V2.comparison-metadata.json"
+    assert paths["latest_dir"].name == "transglobal-holding-company-latest"
+    assert paths["latest_pdf_path"].name == "GEO-STRATEGY-REPORT-V2.pdf"
 
 
 def test_v2_default_reports_dir_is_repo_root_relative():
@@ -240,22 +245,105 @@ def test_v2_output_paths_use_run_seed_to_separate_same_day_runs(tmp_path):
 
 
 def test_publish_v2_artifacts_writes_manifest_evidence_and_comparison_metadata(tmp_path):
-    paths = publish_v2_artifacts(
-        brand_name="TransGlobal Holding Company",
-        date_stamp="2026-03-30",
-        payload=_payload(compare_to_v1=True, shadow_run=False),
-        base_dir=tmp_path,
-    )
+    with patch("scripts.strategy_engine_v2.publish.generate_report") as generate_report:
+        def _fake_generate_report(data, output_path):
+            Path(output_path).write_text("fake pdf", encoding="utf-8")
+            return output_path
+
+        generate_report.side_effect = _fake_generate_report
+        paths = publish_v2_artifacts(
+            brand_name="TransGlobal Holding Company",
+            date_stamp="2026-03-30",
+            payload=_payload(compare_to_v1=True, shadow_run=False),
+            base_dir=tmp_path,
+        )
 
     assert paths["markdown_path"].exists()
+    assert paths["pdf_path"].exists()
     assert paths["compat_markdown_path"].exists()
     assert paths["manifest_path"].exists()
     assert paths["evidence_path"].exists()
     assert paths["comparison_metadata_path"].exists()
+    assert paths["latest_markdown_path"].exists()
+    assert paths["latest_pdf_path"].exists()
+    assert paths["latest_manifest_path"].exists()
+    assert paths["latest_evidence_path"].exists()
 
     comparison_metadata = json.loads(paths["comparison_metadata_path"].read_text(encoding="utf-8"))
     assert comparison_metadata["compare_to_v1"] is True
     assert comparison_metadata["comparison_eligible"] is True
+
+
+def test_publish_v2_artifacts_keeps_only_latest_brand_runs(tmp_path):
+    with patch("scripts.strategy_engine_v2.publish.generate_report") as generate_report:
+        def _fake_generate_report(data, output_path):
+            Path(output_path).write_text("fake pdf", encoding="utf-8")
+            return output_path
+
+        generate_report.side_effect = _fake_generate_report
+
+        publish_v2_artifacts(
+            brand_name="TransGlobal Holding Company",
+            date_stamp="2026-03-30",
+            payload=_payload(compare_to_v1=False, shadow_run=True),
+            base_dir=tmp_path,
+            run_seed="2026-03-30T10:00:00Z|https://www.transglobalus.com/",
+            retain_runs=2,
+        )
+        publish_v2_artifacts(
+            brand_name="TransGlobal Holding Company",
+            date_stamp="2026-03-30",
+            payload=_payload(compare_to_v1=False, shadow_run=True),
+            base_dir=tmp_path,
+            run_seed="2026-03-30T11:00:00Z|https://www.transglobalus.com/",
+            retain_runs=2,
+        )
+        publish_v2_artifacts(
+            brand_name="TransGlobal Holding Company",
+            date_stamp="2026-03-30",
+            payload=_payload(compare_to_v1=False, shadow_run=True),
+            base_dir=tmp_path,
+            run_seed="2026-03-30T12:00:00Z|https://www.transglobalus.com/",
+            retain_runs=2,
+        )
+
+    remaining_brand_dirs = sorted(
+        path.name
+        for path in tmp_path.iterdir()
+        if path.is_dir() and path.name.startswith("transglobal-holding-company-")
+    )
+    assert len([name for name in remaining_brand_dirs if name != "transglobal-holding-company-latest"]) == 2
+    assert "transglobal-holding-company-latest" in remaining_brand_dirs
+
+
+def test_publish_v2_artifacts_removes_read_only_stale_runs(tmp_path):
+    with patch("scripts.strategy_engine_v2.publish.generate_report") as generate_report:
+        def _fake_generate_report(data, output_path):
+            Path(output_path).write_text("fake pdf", encoding="utf-8")
+            return output_path
+
+        generate_report.side_effect = _fake_generate_report
+
+        first = publish_v2_artifacts(
+            brand_name="TransGlobal Holding Company",
+            date_stamp="2026-03-30",
+            payload=_payload(compare_to_v1=False, shadow_run=True),
+            base_dir=tmp_path,
+            run_seed="2026-03-30T10:00:00Z|https://www.transglobalus.com/",
+            retain_runs=1,
+        )
+        first["markdown_path"].chmod(stat.S_IREAD)
+
+        publish_v2_artifacts(
+            brand_name="TransGlobal Holding Company",
+            date_stamp="2026-03-30",
+            payload=_payload(compare_to_v1=False, shadow_run=True),
+            base_dir=tmp_path,
+            run_seed="2026-03-30T11:00:00Z|https://www.transglobalus.com/",
+            retain_runs=1,
+        )
+
+    assert not first["report_dir"].exists()
 
 
 def test_run_strategy_report_v2_uses_publisher_and_returns_artifact_paths(tmp_path):
@@ -270,7 +358,9 @@ def test_run_strategy_report_v2_uses_publisher_and_returns_artifact_paths(tmp_pa
     assert result["status"] == "shadow"
     assert "artifact_paths" in result
     assert Path(result["artifact_paths"]["markdown_path"]).name == "GEO-STRATEGY-REPORT-V2.md"
+    assert Path(result["artifact_paths"]["pdf_path"]).name == "GEO-STRATEGY-REPORT-V2.pdf"
     assert Path(result["artifact_paths"]["compat_markdown_path"]).name == "GEO-STRATEGY-REPORT-V2.md"
     assert Path(result["artifact_paths"]["manifest_path"]).exists()
     assert Path(result["artifact_paths"]["evidence_path"]).exists()
     assert Path(result["artifact_paths"]["comparison_metadata_path"]).exists()
+    assert Path(result["artifact_paths"]["latest_markdown_path"]).name == "GEO-STRATEGY-REPORT-V2.md"
