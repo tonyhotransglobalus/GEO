@@ -1,6 +1,10 @@
 from pathlib import Path
 
+import requests
+
+from scripts.strategy_engine_v2 import workflow as workflow_module
 from scripts.strategy_engine_v2.workflow import run_strategy_report_v2
+from tests.strategy_v2_samples import sample_v1_audit_payload, sample_v2_workflow_deps
 
 
 def _workflow_deps():
@@ -21,8 +25,9 @@ def _workflow_deps():
             },
         }
 
-    def build_v2_evidence_ledger_fn(*, manifest):
+    def build_v2_evidence_ledger_fn(*, manifest, audit_data=None, **_kwargs):
         calls.append(("build_v2_evidence_ledger", manifest["target_url"]))
+        assert audit_data["brand_name"] == "TransGlobal Holding Company"
         return {
             "items": [
                 {
@@ -37,8 +42,14 @@ def _workflow_deps():
             "target_url": manifest["target_url"],
         }
 
-    def adjudicate_v2_sections_fn(*, manifest, evidence):
+    def run_v1_audit_fn(**kwargs):
+        calls.append(("run_v1_audit", kwargs["url"]))
+        return sample_v1_audit_payload()
+
+    def adjudicate_v2_sections_fn(*, manifest, evidence, audit_data=None, comparison_context=None):
         calls.append(("adjudicate_v2_sections", evidence["count"]))
+        assert audit_data["brand_name"] == "TransGlobal Holding Company"
+        assert isinstance(comparison_context, dict)
         return {
             "benchmark": {
                 "status": "directional",
@@ -64,6 +75,7 @@ def _workflow_deps():
 
     def build_v2_report_sections_fn(report_input):
         calls.append(("build_v2_report_sections", report_input["manifest"]["target_url"]))
+        assert report_input["audit_data"]["brand_name"] == "TransGlobal Holding Company"
         return {
             "leadership_summary": {
                 "title": "Leadership Summary",
@@ -175,6 +187,7 @@ def _workflow_deps():
 
     class Deps:
         build_run_manifest = staticmethod(build_run_manifest_fn)
+        run_v1_audit = staticmethod(run_v1_audit_fn)
         build_v2_evidence_ledger = staticmethod(build_v2_evidence_ledger_fn)
         adjudicate_v2_sections = staticmethod(adjudicate_v2_sections_fn)
         build_v2_report_sections = staticmethod(build_v2_report_sections_fn)
@@ -225,6 +238,7 @@ def test_run_strategy_report_v2_returns_manifest_evidence_and_sections(tmp_path)
     assert Path(result["artifact_paths"]["comparison_metadata_path"]).name == "GEO-STRATEGY-REPORT-V2.comparison-metadata.json"
     assert [call[0] for call in calls] == [
         "build_run_manifest",
+        "run_v1_audit",
         "build_v2_evidence_ledger",
         "adjudicate_v2_sections",
         "build_v2_report_sections",
@@ -242,4 +256,120 @@ def test_run_strategy_report_v2_returns_manifest_evidence_and_sections(tmp_path)
         "qa",
         "report_sections",
         "rollout_metadata",
+        "audit_data",
+        "comparison_context",
     }
+
+
+def test_load_previous_comparison_context_reads_latest_compatible_run(tmp_path):
+    previous_report_dir = tmp_path / "transglobalus-com-2026-03-30-run-a"
+    previous_report_dir.mkdir(parents=True)
+    (previous_report_dir / "GEO-STRATEGY-REPORT-V2.manifest.json").write_text(
+        """{
+  "target_url": "https://www.transglobalus.com/",
+  "target_domain": "transglobalus.com",
+  "locale": "en-us",
+  "platforms": [],
+  "run_timestamp": "2026-03-30T10:00:00+00:00"
+}""",
+        encoding="utf-8",
+    )
+    (previous_report_dir / "GEO-STRATEGY-REPORT-V2.evidence.json").write_text(
+        """{
+  "items": [
+    {"evidence_type": "run_manifest", "url_or_domain": "https://www.transglobalus.com/"},
+    {"evidence_type": "linked_page", "url_or_domain": "https://www.transglobalus.com/life-insurance-annuity/"}
+  ],
+  "count": 2
+}""",
+        encoding="utf-8",
+    )
+
+    context = workflow_module._load_previous_comparison_context(
+        manifest={
+            "target_url": "https://www.transglobalus.com/",
+            "target_domain": "transglobalus.com",
+            "locale": "en-us",
+            "platforms": [],
+            "run_timestamp": "2026-03-31T10:00:00+00:00",
+            "comparison_eligibility": {"requested": True, "eligible": True},
+        },
+        evidence={
+            "items": [
+                {"evidence_type": "run_manifest", "url_or_domain": "https://www.transglobalus.com/"},
+                {"evidence_type": "linked_page", "url_or_domain": "https://www.transglobalus.com/life-insurance-annuity/"},
+                {"evidence_type": "linked_page", "url_or_domain": "https://www.transglobalus.com/wealth-management/"},
+            ],
+            "count": 3,
+        },
+        reports_dir=tmp_path,
+    )
+
+    assert context["previous_manifest"]["run_timestamp"] == "2026-03-30T10:00:00+00:00"
+    assert context["previous_snapshot"]["non_primary_page_count"] == 1
+    assert context["current_snapshot"]["non_primary_page_count"] == 2
+    assert context["change_points"] >= 1
+
+
+def test_run_v1_audit_tolerates_opportunity_timeouts(monkeypatch):
+    def fake_orchestrate_audit(*args, **kwargs):
+        keyword_suggestions = workflow_module.opportunity_plugin.fetch_keyword_suggestions(
+            "life insurance"
+        )
+        serp_snapshot = workflow_module.opportunity_plugin.fetch_serp_snapshot(
+            "life insurance"
+        )
+        payload = sample_v1_audit_payload()
+        payload["bridge_probe"] = {
+            "keyword_suggestions": keyword_suggestions,
+            "serp_snapshot": serp_snapshot,
+        }
+        return payload
+
+    def raising_fetch(*args, **kwargs):
+        raise requests.ConnectTimeout("timed out")
+
+    monkeypatch.setattr(workflow_module, "orchestrate_audit", fake_orchestrate_audit)
+    monkeypatch.setattr(
+        workflow_module.opportunity_plugin,
+        "fetch_keyword_suggestions",
+        raising_fetch,
+    )
+    monkeypatch.setattr(
+        workflow_module.opportunity_plugin,
+        "fetch_serp_snapshot",
+        raising_fetch,
+    )
+
+    result = workflow_module._run_v1_audit(url="https://www.transglobalus.com/")
+
+    assert result["bridge_probe"]["keyword_suggestions"] == []
+    assert result["bridge_probe"]["serp_snapshot"] == []
+    assert len(result["v2_bridge_metadata"]["network_fallbacks"]) == 2
+    assert all(
+        item["component"] == "opportunity"
+        for item in result["v2_bridge_metadata"]["network_fallbacks"]
+    )
+    assert len(
+        result["client_report_sections"]["technical_proof_appendix"]["bridge_warnings"]
+    ) == 2
+
+
+def test_run_strategy_report_v2_clears_prompt_proof_thinness_when_sampled_query_evidence_is_explained():
+    deps = sample_v2_workflow_deps()
+    audit_data = sample_v1_audit_payload()
+    audit_data["client_report_sections"]["prompt_query_proof"] = {
+        "sampling_note": "Exact platform captures were not retained in this sample.",
+        "rows": [],
+    }
+    deps.run_v1_audit = lambda **_kwargs: audit_data
+
+    result = run_strategy_report_v2(
+        "https://www.transglobalus.com/",
+        shadow_run=True,
+        compare_to_v1=False,
+        deps=deps,
+    )
+
+    assert result["adjudication"]["prompt_proof"]["status"] == "directional"
+    assert "prompt_proof_thinness" not in result["qa"]["issues"]

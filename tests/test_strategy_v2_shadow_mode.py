@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from scripts.strategy_engine_v2.workflow import build_rollout_metadata, run_strategy_report_v2
+from tests.strategy_v2_samples import sample_v2_workflow_deps
 
 
 def test_v2_payload_exposes_shadow_mode_metadata():
@@ -19,6 +20,7 @@ def test_v2_run_payload_threads_rollout_metadata(tmp_path):
         shadow_run=True,
         compare_to_v1=True,
         reports_dir=tmp_path,
+        deps=sample_v2_workflow_deps(),
     )
 
     assert result["rollout_metadata"] == {
@@ -50,8 +52,9 @@ def test_v2_run_payload_uses_comparison_eligibility_not_request_flag(tmp_path):
         (),
         {
             "build_run_manifest": staticmethod(build_run_manifest_fn),
-            "build_v2_evidence_ledger": staticmethod(lambda *, manifest: {"items": [], "count": 0}),
-            "adjudicate_v2_sections": staticmethod(lambda *, manifest, evidence: {
+            "run_v1_audit": staticmethod(lambda **kwargs: {"brand_name": "TransGlobal Holding Company", "client_report_sections": {}}),
+            "build_v2_evidence_ledger": staticmethod(lambda *, manifest, audit_data=None, **kwargs: {"items": [], "count": 0}),
+            "adjudicate_v2_sections": staticmethod(lambda *, manifest, evidence, audit_data=None, comparison_context=None: {
                 "benchmark": {"status": "omitted", "reason": "Benchmark is thin.", "warning": "Benchmark is omitted because named competitors or winner domains were not captured."},
                 "prompt_proof": {"status": "omitted", "reason": "No useful prompt proof was captured.", "warning": "Prompt proof is omitted because exact prompts or winner URLs were not captured."},
                 "platform_breakdown": {"status": "omitted", "reason": "No platform-level evidence was captured.", "warning": "Platform breakdown is omitted because sampled platforms were not captured."},

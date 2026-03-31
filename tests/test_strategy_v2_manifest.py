@@ -1,5 +1,6 @@
 from scripts.strategy_engine_v2.manifest import build_run_manifest
 from scripts.strategy_engine_v2.workflow import run_strategy_report_v2
+from tests.strategy_v2_samples import sample_v2_workflow_deps
 
 
 def test_build_run_manifest_records_scope():
@@ -42,10 +43,11 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
         competitors=["example.com"],
         mode="script-only",
         driver="script",
+        deps=sample_v2_workflow_deps(),
     )
 
     assert result["version"] == "v2"
-    assert result["status"] == "stub"
+    assert result["status"] == "shadow"
     assert result["manifest"]["shadow_run"] is True
     assert result["manifest"]["comparison_eligibility"]["requested"] is True
     assert set(result) == {
@@ -67,8 +69,8 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
         "promotion_owner": "TBD",
         "checklist_status": "pending",
     }
-    assert result["evidence"]["count"] == 1
-    assert result["evidence"]["items"][0]["evidence_type"] == "run_manifest"
+    assert result["evidence"]["count"] >= 1
+    assert any(item["evidence_type"] == "run_manifest" for item in result["evidence"]["items"])
     assert set(result["adjudication"]) == {
         "benchmark",
         "change_since_last_run",

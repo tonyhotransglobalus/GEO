@@ -1,5 +1,6 @@
 from scripts.strategy_engine_v2.qa import run_release_checks
 from scripts.strategy_engine_v2.workflow import run_strategy_report_v2
+from tests.strategy_v2_samples import sample_v2_workflow_deps
 
 
 def _base_payload():
@@ -310,6 +311,7 @@ def test_v2_workflow_exposes_qa_warnings():
     result = run_strategy_report_v2(
         "https://www.transglobalus.com/",
         compare_to_v1=True,
+        deps=sample_v2_workflow_deps(),
     )
 
     assert "qa" in result

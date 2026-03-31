@@ -9,6 +9,7 @@ from scripts.strategy_engine_v2.publish import (
     publish_v2_artifacts,
 )
 from scripts.strategy_engine_v2.workflow import run_strategy_report_v2
+from tests.strategy_v2_samples import sample_v2_workflow_deps
 
 
 def _payload(*, compare_to_v1: bool = False, shadow_run: bool = True) -> dict:
@@ -263,9 +264,10 @@ def test_run_strategy_report_v2_uses_publisher_and_returns_artifact_paths(tmp_pa
         compare_to_v1=True,
         shadow_run=True,
         reports_dir=tmp_path,
+        deps=sample_v2_workflow_deps(),
     )
 
-    assert result["status"] == "stub"
+    assert result["status"] == "shadow"
     assert "artifact_paths" in result
     assert Path(result["artifact_paths"]["markdown_path"]).name == "GEO-STRATEGY-REPORT-V2.md"
     assert Path(result["artifact_paths"]["compat_markdown_path"]).name == "GEO-STRATEGY-REPORT-V2.md"

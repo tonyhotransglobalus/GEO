@@ -1,4 +1,7 @@
 from scripts.strategy_engine_v2.reporting import build_v2_report_sections
+from scripts.strategy_engine_v2.evidence import build_v2_evidence_ledger
+from scripts.strategy_engine_v2.adjudication import adjudicate_v2_sections
+from tests.strategy_v2_samples import sample_v1_audit_payload
 
 
 def test_v2_report_contains_expected_sections():
@@ -38,6 +41,7 @@ def test_v2_report_surfaces_worst_reason_in_leadership_summary():
 
     summary = sections["leadership_summary"]
     assert summary["trust_label"] == "How much to trust this"
+    assert summary["trust_value"] == "Low"
     assert summary["visible_reason"] == "Prompt proof is omitted because exact prompts or winner URLs were not captured."
     assert len(summary["summary"]) <= 3
 
@@ -57,3 +61,190 @@ def test_v2_report_surfaces_visible_reasons_for_downgraded_sections():
     assert sections["competitive_benchmark"]["visible_reason"] == "Benchmark is directional because the sample is incomplete."
     assert sections["platform_breakdown"]["visible_reason"] == "Platform breakdown is omitted because sampled platforms were not captured."
     assert sections["proof_appendix"]["visible_reason"]
+
+
+def test_v2_report_reuses_v1_sections_when_bridge_data_exists():
+    manifest = {
+        "target_url": "https://www.transglobalus.com/",
+        "mode": "script-only",
+        "platforms": ["ChatGPT", "Perplexity"],
+        "competitors": ["competitor.com"],
+        "comparison_eligibility": {"requested": True, "eligible": True},
+    }
+    audit_data = sample_v1_audit_payload()
+    evidence = build_v2_evidence_ledger(manifest=manifest, audit_data=audit_data)
+    adjudication = adjudicate_v2_sections(
+        manifest=manifest,
+        evidence=evidence,
+        audit_data=audit_data,
+    )
+
+    sections = build_v2_report_sections({
+        "manifest": manifest,
+        "evidence": evidence,
+        "adjudication": adjudication,
+        "audit_data": audit_data,
+    })
+
+    assert sections["competitive_benchmark"]["sample_scope"]["query_count"] == 6
+    assert sections["competitive_benchmark"]["benchmark_rows"][0]["competitor_name"] == "Competitor Co"
+    assert sections["platform_breakdown"]["platforms"][0]["platform"] == "ChatGPT"
+    assert sections["page_source_evidence"]["priority_pages"][0]["page_url"] == "https://www.transglobalus.com/"
+    assert sections["action_plan"]["actions"][0]["action"] == "Rewrite key pages into answer-first blocks with facts and citations."
+
+
+def test_v2_report_merges_legacy_proof_with_bridge_warnings():
+    manifest = {
+        "target_url": "https://www.transglobalus.com/",
+        "mode": "script-only",
+        "platforms": ["ChatGPT", "Perplexity"],
+        "competitors": ["competitor.com"],
+        "comparison_eligibility": {"requested": True, "eligible": True},
+    }
+    audit_data = sample_v1_audit_payload()
+    audit_data["client_report_sections"]["technical_proof_appendix"] = {
+        "bridge_warnings": [
+            "DuckDuckGo keyword suggestions timed out for 'life insurance'."
+        ]
+    }
+    audit_data["report_sections"] = {
+        "technical_geo_gates": {
+            "crawler_access": {
+                "GPTBot": {
+                    "platform": "OpenAI",
+                    "status": "Allowed By Default",
+                    "recommendation": "Keep accessible.",
+                }
+            }
+        }
+    }
+    evidence = build_v2_evidence_ledger(manifest=manifest, audit_data=audit_data)
+    adjudication = adjudicate_v2_sections(
+        manifest=manifest,
+        evidence=evidence,
+        audit_data=audit_data,
+    )
+
+    sections = build_v2_report_sections({
+        "manifest": manifest,
+        "evidence": evidence,
+        "adjudication": adjudication,
+        "audit_data": audit_data,
+    })
+
+    proof_appendix = sections["proof_appendix"]
+    assert proof_appendix["bridge_warnings"] == [
+        "DuckDuckGo keyword suggestions timed out for 'life insurance'."
+    ]
+    assert proof_appendix["methodology"]["summary"]
+    assert proof_appendix["robots_and_bot_access"]
+
+
+def test_v2_report_cleans_legacy_wording_and_action_heuristics():
+    manifest = {
+        "target_url": "https://www.transglobalus.com/",
+        "mode": "script-only",
+        "platforms": ["ChatGPT", "Perplexity"],
+        "competitors": ["competitor.com"],
+        "comparison_eligibility": {"requested": True, "eligible": True},
+    }
+    audit_data = sample_v1_audit_payload()
+    audit_data["findings"].append(
+        {
+            "severity": "medium",
+            "title": "Optimization opportunities remain after the base audit",
+            "summary": "Optimization pass keeps the roadmap moving.",
+            "marketing_action": "Turn the ReScience recommendations into a clearer optimization backlog.",
+            "developer_action": "Package the structural fixes into a cleaner rollout plan.",
+            "observed_evidence": "The advisory pass still found improvement room after the base audit.",
+        }
+    )
+    audit_data["client_report_sections"]["action_plan_30_60_90"] = {}
+    audit_data["report_sections"] = {
+        "execution_ledger": {
+            "sixty_day": [
+                {
+                    "action": "Add stronger security headers, starting with Content-Security-Policy.",
+                    "owner": "marketing",
+                },
+                {
+                    "action": "Strengthen entity trust with consistent profiles, citations, and a future Wikidata path if eligible.",
+                    "owner": "leadership",
+                },
+            ],
+            "ninety_day": [
+                {
+                    "action": "Develop stronger entity authority through third-party citations and consistent profile governance.",
+                    "owner": "leadership",
+                }
+            ],
+        }
+    }
+    evidence = build_v2_evidence_ledger(manifest=manifest, audit_data=audit_data)
+    adjudication = adjudicate_v2_sections(
+        manifest=manifest,
+        evidence=evidence,
+        audit_data=audit_data,
+    )
+
+    sections = build_v2_report_sections({
+        "manifest": manifest,
+        "evidence": evidence,
+        "adjudication": adjudication,
+        "audit_data": audit_data,
+    })
+
+    finding = next(
+        item
+        for item in sections["priority_findings"]["findings"]
+        if item["section"] == "Optimization opportunities remain after the base audit"
+    )
+    assert "ReScience" not in finding["marketing_action"]
+
+    security_action = next(
+        item for item in sections["action_plan"]["actions"] if "Content-Security-Policy" in item["action"]
+    )
+    assert security_action["owner"] == "developers"
+
+    entity_action = next(
+        item for item in sections["action_plan"]["actions"] if "future Wikidata path" in item["action"]
+    )
+    assert "quote-ready passages" not in entity_action["expected_outcome"]
+
+
+def test_v2_report_adds_prompt_proof_finding_when_only_sampled_query_evidence_exists():
+    manifest = {
+        "target_url": "https://www.transglobalus.com/",
+        "mode": "script-only",
+        "platforms": ["ChatGPT", "Perplexity"],
+        "competitors": ["competitor.com"],
+        "comparison_eligibility": {"requested": True, "eligible": True},
+    }
+    audit_data = sample_v1_audit_payload()
+    audit_data["client_report_sections"]["prompt_query_proof"] = {
+        "sampling_note": "Exact platform captures were not retained in this sample.",
+        "rows": [],
+    }
+    evidence = build_v2_evidence_ledger(manifest=manifest, audit_data=audit_data)
+    adjudication = adjudicate_v2_sections(
+        manifest=manifest,
+        evidence=evidence,
+        audit_data=audit_data,
+    )
+
+    sections = build_v2_report_sections(
+        {
+            "manifest": manifest,
+            "evidence": evidence,
+            "adjudication": adjudication,
+            "audit_data": audit_data,
+        }
+    )
+
+    prompt_finding = next(
+        item
+        for item in sections["priority_findings"]["findings"]
+        if item["section"] == "prompt_proof"
+    )
+    assert "sampled query evidence" in prompt_finding["summary"].lower()
+    assert "exact prompt" in prompt_finding["visible_reason"].lower()

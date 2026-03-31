@@ -118,7 +118,9 @@ def _has_explained_jargon(report_sections: Mapping[str, Any]) -> bool:
         "llms": "llms",
     }
     for label, needle in jargon_terms.items():
-        if needle in searchable_text and label not in explained_terms:
+        if needle in searchable_text and not any(
+            label in explained or needle in explained for explained in explained_terms
+        ):
             return False
     return True
 
