@@ -50,9 +50,10 @@ def test_change_since_last_run_without_comparable_baseline_is_omitted():
     assert result["status"] == "omitted"
 
 
-def test_v2_workflow_includes_adjudication():
+def test_v2_workflow_includes_adjudication(tmp_path):
     result = run_strategy_report_v2(
         "https://www.transglobalus.com/",
+        reports_dir=tmp_path,
         deps=sample_v2_workflow_deps(),
     )
 

@@ -33,7 +33,7 @@ def test_build_run_manifest_keeps_shadow_comparison_eligible():
     assert manifest["comparison_eligibility"]["eligible"] is True
 
 
-def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
+def test_run_strategy_report_v2_uses_manifest_as_authoritative_state(tmp_path):
     result = run_strategy_report_v2(
         "https://www.transglobalus.com/",
         shadow_run=True,
@@ -43,6 +43,7 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state():
         competitors=["example.com"],
         mode="script-only",
         driver="script",
+        reports_dir=tmp_path,
         deps=sample_v2_workflow_deps(),
     )
 

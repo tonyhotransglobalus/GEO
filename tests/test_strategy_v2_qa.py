@@ -307,10 +307,11 @@ def test_qa_accepts_plain_english_clear_reasons_without_section_keywords():
     assert "prompt_proof_thinness" not in result["issues"]
 
 
-def test_v2_workflow_exposes_qa_warnings():
+def test_v2_workflow_exposes_qa_warnings(tmp_path):
     result = run_strategy_report_v2(
         "https://www.transglobalus.com/",
         compare_to_v1=True,
+        reports_dir=tmp_path,
         deps=sample_v2_workflow_deps(),
     )
 

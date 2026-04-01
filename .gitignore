@@ -40,6 +40,7 @@ env/
 /google_audit.json
 /output/guidance/
 /output/reports/
+/output/reports-v2/
 
 # Credentials and secrets (never commit these)
 *.key

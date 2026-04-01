@@ -392,6 +392,7 @@ def run_strategy_report_v2(
     reports_dir: Path | None = None,
     deps: StrategyV2WorkflowDependencies | None = None,
 ) -> dict:
+    using_default_deps = deps is None
     deps = deps or build_workflow_dependencies()
     manifest = deps.build_run_manifest(
         url=url,
@@ -452,6 +453,11 @@ def run_strategy_report_v2(
         comparable_to_v1=bool(compare_to_v1),
         comparison_eligible=comparable_to_v1,
     )
+    artifact_policy = {
+        "source_kind": "live_audit" if using_default_deps else "custom_deps",
+        "update_latest": using_default_deps,
+        "latest_channel": "shadow" if shadow_run else "published",
+    }
     target_domain = manifest.get("target_domain") or ""
     target_url = manifest.get("target_url") or ""
     run_seed = "|".join(
@@ -478,6 +484,7 @@ def run_strategy_report_v2(
             "rollout_metadata": rollout_metadata,
             "audit_data": audit_data,
             "comparison_context": comparison_context,
+            "artifact_policy": artifact_policy,
         },
         base_dir=reports_dir,
         write_compat_markdown=not shadow_run,

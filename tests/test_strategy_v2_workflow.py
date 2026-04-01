@@ -169,20 +169,23 @@ def _workflow_deps():
                     "brand_name": brand_name,
                     "date_stamp": date_stamp,
                     "payload": payload,
-                    "base_dir": base_dir,
-                    "run_seed": run_seed,
-                    "write_compat_markdown": write_compat_markdown,
+                "base_dir": base_dir,
+                "run_seed": run_seed,
+                "write_compat_markdown": write_compat_markdown,
                 },
             )
         )
-        report_dir = (Path(base_dir) if base_dir else Path("output/reports")) / "transglobalus-com-2026-03-30"
+        report_dir = (Path(base_dir) if base_dir else Path("output/reports-v2")) / "transglobalus-com-2026-03-30"
         return {
             "report_dir": report_dir,
             "markdown_path": report_dir / "GEO-STRATEGY-REPORT-V2.md",
+            "pdf_path": report_dir / "GEO-STRATEGY-REPORT-V2.pdf",
             "compat_markdown_path": report_dir / "GEO-STRATEGY-REPORT-V2.md",
             "manifest_path": report_dir / "GEO-STRATEGY-REPORT-V2.manifest.json",
             "evidence_path": report_dir / "GEO-STRATEGY-REPORT-V2.evidence.json",
             "comparison_metadata_path": report_dir / "GEO-STRATEGY-REPORT-V2.comparison-metadata.json",
+            "latest_markdown_path": report_dir / "transglobalus-com-latest" / "GEO-STRATEGY-REPORT-V2.md",
+            "shadow_latest_markdown_path": report_dir / "transglobalus-com-shadow-latest" / "GEO-STRATEGY-REPORT-V2.md",
         }
 
     class Deps:
@@ -258,6 +261,12 @@ def test_run_strategy_report_v2_returns_manifest_evidence_and_sections(tmp_path)
         "rollout_metadata",
         "audit_data",
         "comparison_context",
+        "artifact_policy",
+    }
+    assert publish_call["payload"]["artifact_policy"] == {
+        "source_kind": "custom_deps",
+        "update_latest": False,
+        "latest_channel": "shadow",
     }
 
 
@@ -355,7 +364,7 @@ def test_run_v1_audit_tolerates_opportunity_timeouts(monkeypatch):
     ) == 2
 
 
-def test_run_strategy_report_v2_clears_prompt_proof_thinness_when_sampled_query_evidence_is_explained():
+def test_run_strategy_report_v2_clears_prompt_proof_thinness_when_sampled_query_evidence_is_explained(tmp_path):
     deps = sample_v2_workflow_deps()
     audit_data = sample_v1_audit_payload()
     audit_data["client_report_sections"]["prompt_query_proof"] = {
@@ -368,6 +377,7 @@ def test_run_strategy_report_v2_clears_prompt_proof_thinness_when_sampled_query_
         "https://www.transglobalus.com/",
         shadow_run=True,
         compare_to_v1=False,
+        reports_dir=tmp_path,
         deps=deps,
     )
 
