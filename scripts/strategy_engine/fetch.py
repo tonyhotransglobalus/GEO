@@ -39,6 +39,7 @@ def fetch_page(url: str, timeout: int = 30) -> dict:
     result = {
         "url": url,
         "status_code": None,
+        "html_bytes": 0,
         "redirect_chain": [],
         "headers": {},
         "meta_tags": {},
@@ -73,6 +74,7 @@ def fetch_page(url: str, timeout: int = 30) -> dict:
             ]
 
         result["status_code"] = response.status_code
+        result["html_bytes"] = len(response.content or b"")
         result["headers"] = dict(response.headers)
 
         # Security headers check

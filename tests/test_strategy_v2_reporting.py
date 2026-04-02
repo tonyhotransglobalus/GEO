@@ -248,3 +248,176 @@ def test_v2_report_adds_prompt_proof_finding_when_only_sampled_query_evidence_ex
     )
     assert "sampled query evidence" in prompt_finding["summary"].lower()
     assert "exact prompt" in prompt_finding["visible_reason"].lower()
+
+
+def test_v2_report_adds_low_risk_fetch_note_without_creating_new_finding():
+    manifest = {
+        "target_url": "https://www.transglobalus.com/",
+        "mode": "script-only",
+        "comparison_eligibility": {"requested": False, "eligible": False},
+    }
+    audit_data = sample_v1_audit_payload()
+    audit_data["page_data"] = {
+        "url": "https://www.transglobalus.com/",
+        "title": "TransGlobal",
+        "html_bytes": 185000,
+        "h1_tags": ["Services We Provide"],
+        "meta_tags": {"description": "Services We Provide"},
+        "canonical": "https://www.transglobalus.com/",
+        "structured_data": [{"@type": "Organization"}],
+    }
+
+    sections = build_v2_report_sections(
+        {
+            "manifest": manifest,
+            "evidence": {"items": [{"evidence_type": "run_manifest"}]},
+            "adjudication": {
+                "benchmark": {"status": "omitted", "reason": "", "warning": ""},
+                "prompt_proof": {"status": "omitted", "reason": "", "warning": ""},
+                "platform_breakdown": {"status": "omitted", "reason": "", "warning": ""},
+                "change_since_last_run": {"status": "omitted", "reason": "", "warning": ""},
+            },
+            "audit_data": audit_data,
+        }
+    )
+
+    appendix = sections["proof_appendix"]
+    assert any("well below the documented 2 mb html fetch limit" in item.lower() for item in appendix["crawl_and_fetch_evidence"])
+    assert not any(
+        item["section"] == "fetch_render_risk"
+        for item in sections["priority_findings"]["findings"]
+    )
+
+
+def test_v2_report_adds_fetch_render_risk_finding_when_html_is_bloated():
+    manifest = {
+        "target_url": "https://www.transglobalus.com/",
+        "mode": "script-only",
+        "comparison_eligibility": {"requested": False, "eligible": False},
+    }
+    audit_data = sample_v1_audit_payload()
+    audit_data["page_data"] = {
+        "url": "https://www.transglobalus.com/",
+        "title": "TransGlobal",
+        "html_bytes": 1750000,
+        "h1_tags": [
+            "Services We Provide",
+            "WHO WE ARE | ABOUT US",
+            "MEET OUR STAFF",
+        ],
+        "meta_tags": {"description": "Services We Provide"},
+        "canonical": "https://www.transglobalus.com/",
+        "structured_data": [],
+    }
+
+    sections = build_v2_report_sections(
+        {
+            "manifest": manifest,
+            "evidence": {"items": [{"evidence_type": "run_manifest"}]},
+            "adjudication": {
+                "benchmark": {"status": "omitted", "reason": "", "warning": ""},
+                "prompt_proof": {"status": "omitted", "reason": "", "warning": ""},
+                "platform_breakdown": {"status": "omitted", "reason": "", "warning": ""},
+                "change_since_last_run": {"status": "omitted", "reason": "", "warning": ""},
+            },
+            "audit_data": audit_data,
+        }
+    )
+
+    finding = next(
+        item
+        for item in sections["priority_findings"]["findings"]
+        if item["section"] == "fetch_render_risk"
+    )
+    assert "google's documented html fetch cutoff" in finding["visible_reason"].lower()
+    assert "critical elements" in finding["marketing_action"].lower()
+    assert any("approaches the documented 2 mb html fetch limit" in item.lower() for item in sections["proof_appendix"]["crawl_and_fetch_evidence"])
+
+
+def test_v2_fetch_render_risk_finding_keeps_page_fetch_evidence():
+    sections = build_v2_report_sections(
+        {
+            "manifest": {
+                "target_url": "https://www.transglobalus.com/",
+                "mode": "script-only",
+                "comparison_eligibility": {"requested": False, "eligible": False},
+            },
+            "evidence": {
+                "items": [
+                    {"evidence_type": "run_manifest"},
+                    {
+                        "evidence_type": "page_fetch",
+                        "raw_observation": {
+                            "url": "https://www.transglobalus.com/",
+                            "title": "TransGlobal",
+                            "html_bytes": 1750000,
+                            "h1_tags": ["One", "Two"],
+                            "meta_tags": {"description": "Services We Provide"},
+                            "canonical": "https://www.transglobalus.com/",
+                            "structured_data": [],
+                        },
+                    },
+                ]
+            },
+            "adjudication": {
+                "benchmark": {"status": "omitted", "reason": "", "warning": ""},
+                "prompt_proof": {"status": "omitted", "reason": "", "warning": ""},
+                "platform_breakdown": {"status": "omitted", "reason": "", "warning": ""},
+                "change_since_last_run": {"status": "omitted", "reason": "", "warning": ""},
+            },
+            "audit_data": sample_v1_audit_payload(),
+        }
+    )
+
+    finding = next(
+        item
+        for item in sections["priority_findings"]["findings"]
+        if item["section"] == "fetch_render_risk"
+    )
+    assert finding["evidence_items"]
+    assert finding["evidence_items"][0]["evidence_type"] == "page_fetch"
+
+
+def test_v2_report_uses_page_fetch_evidence_when_page_data_is_missing():
+    sections = build_v2_report_sections(
+        {
+            "manifest": {
+                "target_url": "https://www.transglobalus.com/",
+                "mode": "script-only",
+                "comparison_eligibility": {"requested": False, "eligible": False},
+            },
+            "evidence": {
+                "items": [
+                    {"evidence_type": "run_manifest"},
+                    {
+                        "evidence_type": "page_fetch",
+                        "raw_observation": {
+                            "url": "https://www.transglobalus.com/",
+                            "title": "TransGlobal",
+                            "html_bytes": 1650000,
+                            "h1_tags": ["One", "Two"],
+                            "meta_tags": {"description": "Services We Provide"},
+                            "canonical": "https://www.transglobalus.com/",
+                            "structured_data": [],
+                        },
+                    },
+                ]
+            },
+            "adjudication": {
+                "benchmark": {"status": "omitted", "reason": "", "warning": ""},
+                "prompt_proof": {"status": "omitted", "reason": "", "warning": ""},
+                "platform_breakdown": {"status": "omitted", "reason": "", "warning": ""},
+                "change_since_last_run": {"status": "omitted", "reason": "", "warning": ""},
+            },
+            "audit_data": sample_v1_audit_payload(),
+        }
+    )
+
+    assert any(
+        "approaches the documented 2 mb html fetch limit" in item.lower()
+        for item in sections["proof_appendix"]["crawl_and_fetch_evidence"]
+    )
+    assert any(
+        item["section"] == "fetch_render_risk"
+        for item in sections["priority_findings"]["findings"]
+    )

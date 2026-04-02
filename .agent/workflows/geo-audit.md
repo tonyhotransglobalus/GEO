@@ -1,28 +1,27 @@
 ---
-description: Run a full GEO+SEO audit on a website to analyze AI search visibility
+description: Run the analysis-oriented GEO audit workflow
 ---
 
 # GEO Full Audit Workflow
 
-Run the combined GEO audit without generating the final PDF.
+Run the analysis-oriented GEO audit workflow.
 
-This workflow now uses the single orchestrator entrypoint instead of listing
-the individual scripts manually.
+Use this when the goal is to inspect the audit behavior and intermediate
+results, not just hand over the final PDF.
 
 ## Command
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\strategy_report.py <URL>
+.\.venv\Scripts\python.exe scripts\strategy_report.py https://www.transglobalus.com/ --non-interactive
 ```
 
-## Outputs
+## Primary Outputs
 
-- `GEO-CLIENT-REPORT.md`
-- `output/data/<site>-geo-audit-<date>.json`
+- `output/reports/<site>-<date>/GEO-STRATEGY-REPORT.md`
+- `output/reports/<site>-<date>/audit-data.json`
 
 ## Notes
 
-- Use `.agent/workflows/geo-strategy-report.md` when the final deliverable should be a PDF.
-- `.agent/workflows/geo-report-pdf.md` remains as a legacy alias to the same strategist entrypoint.
-- The numeric score comes from `geo-seo-claude`.
-- The ReScience pass is advisory and appears as a separate optimization section.
+- The current implementation may also generate the PDF as part of the same run.
+- Use `.agent/workflows/geo-strategy-report.md` when the final deliverable itself is the main goal.
+- Use `.agent/workflows/geo-strategy-report-v2.md` when testing the next-generation V2 report pipeline.

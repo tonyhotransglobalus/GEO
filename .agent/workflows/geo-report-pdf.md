@@ -1,31 +1,33 @@
 ---
-description: Run the single-entry GEO orchestration flow and generate the final PDF deliverable
+description: Legacy alias for the stable strategist workflow
 ---
 
 # GEO Report PDF Workflow
 
-Legacy alias for the preferred `geo-strategy-report` workflow.
+Legacy alias for `geo-strategy-report`.
 
-Run the end-to-end GEO workflow through the shared strategist entrypoint.
-
-This is the single public entrypoint for Codex, Antigravity, and Gemini CLI when
-the desired output is one final PDF.
+Use this only when someone still asks for the old `report-pdf` name. It runs
+the same stable report path as `geo-strategy-report`.
 
 ## Command
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\strategy_report.py <URL>
+.\.venv\Scripts\python.exe scripts\strategy_report.py https://www.transglobalus.com/ --non-interactive
 ```
 
 ## What It Does
 
-1. Runs the `geo-seo-claude` scoring and audit flow
-2. Runs a ReScience `seo-geo` optimization pass
-3. Writes the combined markdown report and JSON payload
-4. Generates the final PDF deliverable
+1. Runs the shared audit orchestration flow
+2. Builds the combined markdown report and audit payload
+3. Generates the final PDF deliverable
 
 ## Outputs
 
-- `GEO-CLIENT-REPORT.md`
-- `output/data/<site>-geo-audit-<date>.json`
-- `output/pdf/GEO-REPORT-<Brand>-<date>.pdf`
+- `output/reports/<site>-<date>/GEO-STRATEGY-REPORT.md`
+- `output/reports/<site>-<date>/audit-data.json`
+- `output/reports/<site>-<date>/GEO-STRATEGY-REPORT.pdf`
+
+## Notes
+
+- Prefer `.agent/workflows/geo-strategy-report.md` in new usage.
+- This alias remains for backwards compatibility only.

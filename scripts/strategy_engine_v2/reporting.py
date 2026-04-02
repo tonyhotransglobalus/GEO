@@ -251,6 +251,88 @@ def _has_finding_section(findings: list[dict[str, Any]], section_name: str) -> b
     return any(_normalized_text(item.get("section")) == normalized_section for item in findings)
 
 
+def _page_fetch_risk(report_input: Mapping[str, Any]) -> dict[str, Any]:
+    page_data = _mapping(_audit_data(report_input).get("page_data"))
+    evidence_item: dict[str, Any] = {}
+    if not page_data:
+        for item in _evidence_items(report_input):
+            if _normalized_text(item.get("evidence_type")) == "page_fetch":
+                page_data = _mapping(item.get("raw_observation"))
+                if page_data:
+                    evidence_item = dict(item)
+                    break
+    else:
+        for item in _evidence_items(report_input):
+            if _normalized_text(item.get("evidence_type")) == "page_fetch":
+                evidence_item = dict(item)
+                break
+    html_bytes_raw = page_data.get("html_bytes")
+    try:
+        html_bytes = int(html_bytes_raw)
+    except (TypeError, ValueError):
+        html_bytes = 0
+    if html_bytes <= 0:
+        return {}
+
+    html_kb = round(html_bytes / 1024)
+    html_mb = html_bytes / (1024 * 1024)
+    meta_tags = _mapping(page_data.get("meta_tags"))
+    h1_tags = _sequence(page_data.get("h1_tags"))
+    structured_data = _sequence(page_data.get("structured_data"))
+    risk_flags: list[str] = []
+    if not _string(page_data.get("canonical")):
+        risk_flags.append("canonical")
+    if not _string(page_data.get("title")):
+        risk_flags.append("title")
+    if not _string(meta_tags.get("description")):
+        risk_flags.append("description")
+    if not structured_data:
+        risk_flags.append("structured data")
+    if len(h1_tags) != 1:
+        risk_flags.append("heading structure")
+
+    if html_bytes >= 1_500_000:
+        note = (
+            f"Homepage HTML is about {html_kb:,} KB ({html_mb:.2f} MB) and approaches the documented 2 MB HTML fetch limit "
+            "Google describes for Googlebot. Keep critical elements such as the title, canonical, description, "
+            "structured data, and answer-first content early in the document."
+        )
+        visible_reason = (
+            f"The homepage HTML approaches Google's documented HTML fetch cutoff at about {html_kb:,} KB "
+            f"({html_mb:.2f} MB)."
+        )
+        if risk_flags:
+            visible_reason += (
+                " The current page also shows weaker coverage for "
+                + ", ".join(risk_flags)
+                + "."
+            )
+        return {
+            "status": "high",
+            "note": note,
+            "visible_reason": visible_reason,
+            "marketing_action": (
+                "Keep critical elements and answer-first copy near the top of the document so important signals are not pushed "
+                "toward Google's fetch cutoff."
+            ),
+            "engineering_action": (
+                "Reduce inline HTML weight, simplify repeated template markup, and move bulky CSS or JavaScript out of the initial "
+                "document where practical."
+            ),
+            "evidence_items": [evidence_item] if evidence_item else [],
+        }
+
+    note = (
+        f"Homepage HTML is about {html_kb:,} KB ({html_mb:.2f} MB), which stays well below the documented 2 MB HTML fetch limit "
+        "Google describes for Googlebot. This is a supporting technical check rather than a core GEO score factor."
+    )
+    return {
+        "status": "low",
+        "note": note,
+        "evidence_items": [evidence_item] if evidence_item else [],
+    }
+
+
 def _prompt_proof_finding(
     adjudication: Mapping[str, Any],
     evidence_by_type: Mapping[str, list[dict[str, Any]]],
@@ -396,6 +478,29 @@ def _priority_findings(report_input: Mapping[str, Any]) -> dict[str, Any]:
     prompt_proof_finding = _prompt_proof_finding(adjudication, evidence_by_type)
     if prompt_proof_finding and not _has_finding_section(findings, "prompt_proof"):
         findings.append(prompt_proof_finding)
+
+    fetch_risk = _page_fetch_risk(report_input)
+    if (
+        fetch_risk
+        and _normalized_text(fetch_risk.get("status")) == "high"
+        and not _has_finding_section(findings, "fetch_render_risk")
+    ):
+        findings.append(
+            {
+                "section": "fetch_render_risk",
+                "status": "medium",
+                "summary": (
+                    "The homepage HTML is large enough that Google-specific fetch limits become a practical technical risk."
+                ),
+                "visible_reason": _string(fetch_risk.get("visible_reason")),
+                "leadership_impact": (
+                    "This is not a headline GEO factor, but it can weaken crawl visibility if critical signals land too late in the HTML."
+                ),
+                "marketing_action": _string(fetch_risk.get("marketing_action")),
+                "engineering_action": _string(fetch_risk.get("engineering_action")),
+                "evidence_items": _sequence(fetch_risk.get("evidence_items")),
+            }
+        )
 
     if not findings:
         for section_name in ("benchmark", "prompt_proof", "platform_breakdown", "change_since_last_run"):
@@ -692,6 +797,10 @@ def _proof_appendix(report_input: Mapping[str, Any]) -> dict[str, Any]:
     schema_proof = _sequence(technical_proof.get("schema_proof")) or _sequence(fallback_proof.get("schema_proof"))
     source_inventory = _sequence(technical_proof.get("source_inventory")) or _sequence(fallback_proof.get("source_inventory"))
     limitations = _mapping(technical_proof.get("limitations")) or _mapping(fallback_proof.get("limitations"))
+    fetch_risk = _page_fetch_risk(report_input)
+    if fetch_risk:
+        crawl_and_fetch_evidence = list(crawl_and_fetch_evidence)
+        crawl_and_fetch_evidence.append(_string(fetch_risk.get("note")))
     return {
         "title": "Proof Appendix",
         "manifest": manifest,
