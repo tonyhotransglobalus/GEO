@@ -49,6 +49,26 @@ class StrategyWorkflowDependencies:
     orchestrator_cls: type[StrategyOrchestrator]
 
 
+def _cleanup_legacy_artifacts(output_paths: Mapping[str, Path]) -> None:
+    report_dir = output_paths["report_dir"]
+    current_names = {path.name for path in output_paths.values() if isinstance(path, Path)}
+    legacy_names = {
+        "GEO-CLIENT-REPORT.md",
+        "GEO-REPORT.pdf",
+        "GEO-REPORT-ASSISTED.pdf",
+        "GEO-REPORT-SCRIPT.pdf",
+        "GEO-REPORT-SCRIPT.md",
+        "GEO-REPORT-ASSISTED.md",
+        "GEO-STRATEGIST-WORKBOOK.pdf",
+    }
+    for name in legacy_names:
+        if name in current_names:
+            continue
+        candidate = report_dir / name
+        if candidate.exists():
+            candidate.unlink()
+
+
 def _clean_list(values: list[str] | None) -> list[str]:
     return [str(value).strip() for value in (values or []) if str(value).strip()]
 
@@ -62,6 +82,7 @@ def run_strategy_report(
     locale: str = "en-us",
     result_limit: int = 5,
     generate_pdf_output: bool = True,
+    presentation_metadata: dict[str, Any] | None = None,
 ) -> dict:
     page_data = deps.fetch_page(url)
     robots_data = deps.fetch_robots_txt(url)
@@ -189,6 +210,7 @@ def run_strategy_report(
         report_sections=deps.build_report_sections(
             audit_report,
             {
+                "presentation_metadata": presentation_metadata or {},
                 "geo_scores": geo_scores,
                 "platforms": platforms,
                 "page_data": page_data,
@@ -219,6 +241,7 @@ def run_strategy_report(
             audit_report,
             {
                 "date": report_date,
+                "presentation_metadata": presentation_metadata or {},
                 "geo_scores": geo_scores,
                 "platforms": platforms,
                 "page_data": page_data,
@@ -246,30 +269,41 @@ def run_strategy_report(
             },
         ),
         date=report_date,
+        presentation_metadata=presentation_metadata,
     )
+    if presentation_metadata is not None:
+        combined.setdefault("presentation_metadata", presentation_metadata)
 
     report_markdown = deps.render_markdown_report(combined)
 
-    output_paths = deps.build_output_paths(brand_name, combined["date"])
+    selected_run_mode = "script-only"
+    selected_model_name = None
+    if isinstance(presentation_metadata, dict):
+        selected_run_mode = str(
+            presentation_metadata.get("run_mode") or selected_run_mode
+        )
+        if presentation_metadata.get("model"):
+            selected_model_name = str(presentation_metadata.get("model"))
+
+    output_paths = deps.build_output_paths(
+        brand_name,
+        combined["date"],
+        run_mode=selected_run_mode,
+        model_name=selected_model_name,
+    )
     markdown_path = output_paths["markdown_path"]
     json_path = output_paths["json_path"]
-    pdf_path = output_paths["pdf_path"]
+    _cleanup_legacy_artifacts(output_paths)
 
     deps.write_text(markdown_path, report_markdown)
     deps.write_json(json_path, combined)
 
     if generate_pdf_output:
-        deps.generate_report(combined, str(output_paths["client_pdf_path"]))
-        deps.generate_workbook_report(combined, str(output_paths["workbook_pdf_path"]))
-        combined["pdf_path"] = str(output_paths["client_pdf_path"])
-        combined["client_pdf_path"] = str(output_paths["client_pdf_path"])
-        combined["workbook_pdf_path"] = str(output_paths["workbook_pdf_path"])
+        deps.generate_report(combined, str(output_paths["pdf_path"]))
+        combined["pdf_path"] = str(output_paths["pdf_path"])
+        combined["client_pdf_path"] = str(output_paths["pdf_path"])
 
     combined["report_dir"] = str(output_paths["report_dir"])
     combined["markdown_path"] = str(markdown_path)
     combined["json_path"] = str(json_path)
-    if "client_pdf_path" not in combined:
-        combined["pdf_path"] = str(output_paths["client_pdf_path"])
-        combined["client_pdf_path"] = str(output_paths["client_pdf_path"])
-        combined["workbook_pdf_path"] = str(output_paths["workbook_pdf_path"])
     return combined

@@ -50,6 +50,17 @@ def test_change_since_last_run_without_comparable_baseline_is_omitted():
     assert result["status"] == "omitted"
 
 
+def test_change_since_last_run_with_stable_comparable_baseline_is_decision_grade():
+    result = classify_change_since_last_run_section(
+        compare_to_v1=True,
+        comparable_runs=True,
+        change_points=0,
+    )
+
+    assert result["status"] == "decision-grade"
+    assert "no material change points were detected" in result["reason"].lower()
+
+
 def test_v2_workflow_includes_adjudication(tmp_path):
     result = run_strategy_report_v2(
         "https://www.transglobalus.com/",

@@ -14,6 +14,13 @@ def slugify(value: str) -> str:
     return slug or "site"
 
 
+def filename_token(value: str | None) -> str | None:
+    if not value:
+        return None
+    token = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-")
+    return token or None
+
+
 def extract_brand_name(page_data: dict, fallback_url: str) -> str:
     title = (page_data.get("title") or "").strip()
     if title:
@@ -98,14 +105,27 @@ def write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def build_output_paths(brand_name: str, date_stamp: str) -> dict[str, Path]:
+def build_output_paths(
+    brand_name: str,
+    date_stamp: str,
+    *,
+    run_mode: str = "script-only",
+    model_name: str | None = None,
+) -> dict[str, Path]:
     report_dir = DEFAULT_REPORTS_DIR / f"{slugify(brand_name)}-{date_stamp}"
-    client_pdf_path = report_dir / "GEO-REPORT.pdf"
+    
+    # Unified output naming to avoid confusion
+    pdf_path = report_dir / "GEO-STRATEGY-REPORT.pdf"
+    markdown_path = report_dir / "GEO-STRATEGY-REPORT.md"
+    
     return {
         "report_dir": report_dir,
-        "markdown_path": report_dir / "GEO-CLIENT-REPORT.md",
+        "markdown_path": markdown_path,
         "json_path": report_dir / "audit-data.json",
-        "pdf_path": client_pdf_path,
-        "client_pdf_path": client_pdf_path,
-        "workbook_pdf_path": report_dir / "GEO-STRATEGIST-WORKBOOK.pdf",
+        "pdf_path": pdf_path,
+        "client_pdf_path": pdf_path,
+        "script_pdf_path": pdf_path,
+        "assisted_pdf_path": pdf_path,
+        "script_markdown_path": markdown_path,
+        "assisted_markdown_path": markdown_path,
     }

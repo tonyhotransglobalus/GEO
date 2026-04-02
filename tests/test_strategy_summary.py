@@ -27,8 +27,19 @@ class StrategySummaryTest(unittest.TestCase):
             "Restore homepage accessibility and eliminate 5xx or unreachable states.",
             "Add server-rendered content so crawlers can see meaningful HTML without JavaScript.",
         ])
-        self.assertIn("Publish llms.txt and llms-full.txt at the site root.", result["priority_actions"]["P1"])
+        self.assertIn(
+            "Consider publishing llms.txt and llms-full.txt as optional AI discoverability hints for supported platforms.",
+            result["priority_actions"]["P2"],
+        )
         self.assertTrue(result["geo_methods"])
+        self.assertIn(
+            "Google AI Overviews",
+            result["platform_guidance"],
+        )
+        self.assertIn(
+            "No special AI file is required for Google visibility.",
+            result["platform_guidance"]["Google AI Overviews"],
+        )
 
     def test_build_findings_includes_ai_citability_and_heading_findings(self):
         findings = build_findings(
@@ -42,7 +53,8 @@ class StrategySummaryTest(unittest.TestCase):
 
         self.assertGreaterEqual(len(findings), 3)
         self.assertEqual(findings[0]["severity"], "critical")
-        self.assertEqual(findings[1]["severity"], "high")
+        self.assertEqual(findings[1]["severity"], "medium")
+        self.assertIn("optional", findings[1]["summary"].lower())
         self.assertEqual(findings[2]["title"], "Heading architecture is diluted")
 
     def test_build_action_lists_uses_rescience_priorities(self):
@@ -56,15 +68,24 @@ class StrategySummaryTest(unittest.TestCase):
 
     def test_build_crawler_access_normalizes_status(self):
         access = build_crawler_access(
-            {"ai_crawler_status": {"GPTBot": "allow", "ClaudeBot": "block"}}
+            {
+                "ai_crawler_status": {
+                    "GPTBot": "allow",
+                    "OAI-SearchBot": "allow",
+                    "ClaudeBot": "block",
+                    "Claude-SearchBot": "allow",
+                }
+            }
         )
 
         self.assertEqual(access["GPTBot"]["status"], "Allow")
         self.assertEqual(access["GPTBot"]["recommendation"], "Keep accessible.")
+        self.assertEqual(access["OAI-SearchBot"]["platform"], "OpenAI search")
         self.assertEqual(access["ClaudeBot"]["status"], "Block")
         self.assertEqual(access["ClaudeBot"]["recommendation"], "Review access.")
+        self.assertEqual(access["Claude-SearchBot"]["platform"], "Claude search")
 
-    def test_build_executive_summary_mentions_llms_and_brand(self):
+    def test_build_executive_summary_mentions_brand_and_positions_llms_as_optional(self):
         summary = build_executive_summary(
             brand_name="Example Co",
             geo_score=91,
@@ -77,7 +98,8 @@ class StrategySummaryTest(unittest.TestCase):
 
         self.assertIn("Example Co", summary)
         self.assertIn("GEO score of 91/100", summary)
-        self.assertIn("missing llms.txt guidance layer", summary)
+        self.assertIn("optional llms.txt guidance file is not published", summary)
+        self.assertNotIn("most urgent structural issue is the missing llms.txt guidance layer", summary)
         self.assertIn("exposes 2 H1 tags", summary)
 
 

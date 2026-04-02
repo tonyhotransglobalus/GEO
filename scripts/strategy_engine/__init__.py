@@ -59,6 +59,7 @@ from .brand import generate_brand_report
 from .citability import analyze_page_citability
 from .fetch import crawl_sitemap, fetch_llms_txt, fetch_page, fetch_robots_txt
 from .llmstxt import validate_llmstxt
+from .guidance import load_guidance_snapshot, refresh_guidance_snapshot
 from .pdf import generate_report, generate_workbook_report
 
 __all__ = [
@@ -116,6 +117,8 @@ __all__ = [
     "fetch_page",
     "fetch_robots_txt",
     "validate_llmstxt",
+    "load_guidance_snapshot",
+    "refresh_guidance_snapshot",
     "generate_report",
     "generate_workbook_report",
 ]

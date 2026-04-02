@@ -16,7 +16,7 @@ from scripts.strategy_engine.reporting import (
 
 
 class ReportSectionsBuilderTest(unittest.TestCase):
-    def test_build_client_report_sections_returns_expected_keys_and_market_metadata(self):
+    def test_build_client_report_sections_returns_approved_combined_contract(self):
         report_model = ReportModel(
             brand_name="Example Co",
             site_snapshot=SiteSnapshot(
@@ -53,6 +53,14 @@ class ReportSectionsBuilderTest(unittest.TestCase):
                     failure_mode="weak_citation_support",
                     evidence=["AI citability is low"],
                     recommended_fix="Add answer-first blocks and supporting citations",
+                    metadata={
+                        "platform": "ChatGPT",
+                        "model_surface": "web search",
+                        "winning_domains": ["competitor-a.com"],
+                        "winning_urls": ["https://competitor-a.com/guide"],
+                        "response_summary": "Competitor A was cited instead of Example Co in the sampled answer.",
+                        "snapshot_id": "snapshot-1",
+                    },
                 )
             ],
             plugin_results={
@@ -139,22 +147,82 @@ class ReportSectionsBuilderTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            set(sections),
-            {
-                "cover",
+            list(sections),
+            [
+                "cover_verdict",
                 "decision_summary",
-                "priority_risks",
-                "top_opportunities",
-                "market_snapshot",
-                "roadmap",
-                "methodology",
+                "score_definitions",
+                "priority_findings",
+                "competitive_benchmark",
+                "platform_breakdown",
+                "prompt_query_proof",
+                "page_source_evidence",
+                "action_plan_30_60_90",
+                "technical_proof_appendix",
+            ],
+        )
+        self.assertEqual(sections["cover_verdict"]["brand_name"], "Example Co")
+        self.assertEqual(sections["cover_verdict"]["verdict_status"], "visible")
+        self.assertEqual(sections["cover_verdict"]["sample_completeness"], "strong")
+        self.assertIn(sections["cover_verdict"]["overall_confidence"], {"high", "medium"})
+        self.assertTrue(sections["decision_summary"]["top_blockers"])
+        self.assertTrue(sections["decision_summary"]["top_opportunities"])
+        self.assertTrue(sections["decision_summary"]["top_3_actions"])
+        metrics = sections["score_definitions"]["metrics"]
+        self.assertEqual([metric["metric_key"] for metric in metrics], [
+            "geo_score",
+            "citability_score",
+            "technical_readiness_score",
+            "entity_trust_score",
+            "competitor_visibility_score",
+        ])
+        self.assertTrue(sections["score_definitions"]["term_guide"])
+        self.assertIn("weighted blend", sections["score_definitions"]["weighting"]["summary"].lower())
+        self.assertEqual(
+            sections["score_definitions"]["weighting"]["components"][0]["weight"],
+            25,
+        )
+        self.assertGreaterEqual(len(sections["competitive_benchmark"]["benchmark_rows"]), 2)
+        self.assertEqual(sections["competitive_benchmark"]["sample_scope"]["sample_completeness"], "strong")
+        self.assertEqual(len(sections["platform_breakdown"]["platforms"]), 6)
+        self.assertTrue(
+            any(
+                platform["platform"] == "Gemini"
+                for platform in sections["platform_breakdown"]["platforms"]
+            )
+        )
+        self.assertTrue(sections["prompt_query_proof"]["rows"])
+        self.assertIn("sampled", sections["prompt_query_proof"]["sampling_note"].lower())
+        first_proof = sections["prompt_query_proof"]["rows"][0]
+        self.assertEqual(first_proof["brand_mentioned"], "not_directly_verified")
+        self.assertEqual(first_proof["brand_cited"], "not_directly_verified")
+        self.assertTrue(sections["page_source_evidence"]["priority_pages"])
+        self.assertTrue(sections["page_source_evidence"]["source_domains"])
+        self.assertTrue(sections["action_plan_30_60_90"]["actions"])
+        self.assertIn("methodology", sections["technical_proof_appendix"])
+        risk = sections["priority_findings"]["items"][0]
+        self.assertEqual(
+            set(risk),
+            {
+                "title",
+                "severity",
+                "plain_english_summary",
+                "what_we_observed",
+                "why_it_matters_to_business",
+                "evidence_class",
+                "proof",
+                "confidence",
+                "counterpoint_or_limitation",
+                "marketing_action",
+                "engineering_action",
+                "success_metric",
+                "affected_pages_or_queries",
             },
         )
-        self.assertEqual(sections["market_snapshot"]["confidence"], "supported")
-        self.assertGreaterEqual(len(sections["market_snapshot"]["benchmark_rows"]), 2)
-        self.assertIn("readiness_snapshot", sections["cover"])
+        self.assertIn("marketing", risk["marketing_action"].lower())
+        self.assertIn("engineering", risk["engineering_action"].lower())
 
-    def test_build_client_report_sections_uses_sparse_market_fallback_and_dedupes_roadmap(self):
+    def test_build_client_report_sections_uses_sparse_market_fallback_and_dedupes_action_plan(self):
         report_model = ReportModel(
             brand_name="Example Co",
             site_snapshot=SiteSnapshot(
@@ -233,20 +301,416 @@ class ReportSectionsBuilderTest(unittest.TestCase):
             },
         )
 
-        self.assertEqual(sections["market_snapshot"]["confidence"], "limited")
+        self.assertEqual(sections["cover_verdict"]["sample_completeness"], "thin")
         self.assertIn(
             "competitive picture is still incomplete",
-            sections["market_snapshot"]["summary"].lower(),
+            sections["competitive_benchmark"]["summary"].lower(),
         )
-        self.assertEqual(sections["roadmap"]["thirty_day"], ["Publish llms.txt."])
+        google_ai = next(
+            platform
+            for platform in sections["platform_breakdown"]["platforms"]
+            if platform["platform"] == "Google AI features"
+        )
+        self.assertEqual(google_ai["observed_visibility_status"], "Not sampled in this run")
+        self.assertEqual(google_ai["confidence"], "low")
         self.assertEqual(
-            sections["roadmap"]["sixty_day"],
+            [item["action"] for item in sections["action_plan_30_60_90"]["actions"] if item["time_horizon"] == "30_days"],
+            ["Publish llms.txt."],
+        )
+        self.assertEqual(
+            [item["action"] for item in sections["action_plan_30_60_90"]["actions"] if item["time_horizon"] == "60_days"],
             ["Normalize heading hierarchy."],
         )
         self.assertEqual(
-            sections["roadmap"]["ninety_day"],
+            [item["action"] for item in sections["action_plan_30_60_90"]["actions"] if item["time_horizon"] == "90_days"],
             ["Build recurring GEO content."],
         )
+        self.assertIn("optional llms.txt", sections["decision_summary"]["leadership_takeaway"].lower())
+
+    def test_build_client_report_sections_evidence_gates_directional_sections_without_direct_proof(self):
+        report_model = ReportModel(
+            brand_name="Example Co",
+            site_snapshot=SiteSnapshot(
+                url="https://example.com",
+                title="Example Co",
+                canonical_url="https://example.com",
+            ),
+            query_clusters=[
+                QueryCluster(
+                    label="example-ai-visibility",
+                    queries=["example ai visibility"],
+                    search_intent="informational",
+                    priority="high",
+                    metadata={"seed_topic": "Example AI visibility"},
+                ),
+                QueryCluster(
+                    label="example-proof-rich-content",
+                    queries=["example proof rich content"],
+                    search_intent="commercial",
+                    priority="high",
+                    metadata={"seed_topic": "Proof-rich content"},
+                ),
+            ],
+            competitor_profiles=[
+                CompetitorProfile(
+                    name="Competitor A",
+                    domain="competitor-a.com",
+                    strengths=["clear positioning"],
+                )
+            ],
+        )
+
+        sections = build_client_report_sections(
+            report_model,
+            {
+                "geo_scores": {
+                    "geo_score": 62,
+                    "scores": {
+                        "ai_citability": 48,
+                        "brand_authority": 54,
+                        "content_eeat": 64,
+                        "technical": 71,
+                        "schema": 59,
+                        "platform_optimization": 52,
+                    },
+                },
+                "platforms": {"ChatGPT": 55},
+                "page_data": {
+                    "url": "https://example.com",
+                    "title": "Example Co",
+                    "h1_tags": ["Example Co"],
+                    "word_count": 540,
+                },
+                "citability_data": {"average_citability_score": 48},
+                "plugin_results": {
+                    "competitor_analysis": {
+                        "summary": {
+                            "competitor_count": 1,
+                            "earned_media_count": 0,
+                        },
+                        "source_inventory": {
+                            "site_owned": ["example.com"],
+                            "competitor_owned": [],
+                            "earned_media": [],
+                        },
+                    }
+                },
+                "findings": [],
+                "quick_wins": [],
+                "medium_term": [],
+                "strategic": [],
+            },
+        )
+
+        self.assertEqual(sections["cover_verdict"]["sample_completeness"], "partial")
+        competitor_metric = next(
+            metric
+            for metric in sections["score_definitions"]["metrics"]
+            if metric["metric_key"] == "competitor_visibility_score"
+        )
+        self.assertEqual(competitor_metric["confidence"], "low")
+        self.assertIn("directional only", competitor_metric["plain_english_definition"].lower())
+        self.assertIn(
+            "no decision-grade competitor benchmark",
+            sections["competitive_benchmark"]["summary"].lower(),
+        )
+        chatgpt = next(
+            platform
+            for platform in sections["platform_breakdown"]["platforms"]
+            if platform["platform"] == "ChatGPT"
+        )
+        self.assertEqual(chatgpt["observed_visibility_status"], "Directional only in this run")
+        self.assertEqual(chatgpt["confidence"], "low")
+        self.assertIn("no platform-specific answer capture", chatgpt["observed_site_status"].lower())
+        self.assertEqual(sections["prompt_query_proof"]["rows"], [])
+        self.assertIn("did not capture exact prompts", sections["prompt_query_proof"]["sampling_note"].lower())
+
+    def test_build_client_report_sections_requires_verified_prompt_artifacts_for_direct_capture(self):
+        report_model = ReportModel(
+            brand_name="Example Co",
+            site_snapshot=SiteSnapshot(
+                url="https://example.com",
+                title="Example Co",
+                canonical_url="https://example.com",
+            ),
+            query_clusters=[
+                QueryCluster(
+                    label="example-ai-visibility",
+                    queries=["example ai visibility"],
+                    search_intent="informational",
+                    priority="high",
+                    metadata={"seed_topic": "Example AI visibility"},
+                )
+            ],
+            citation_failures=[
+                CitationFailure(
+                    query="example ai visibility",
+                    target_url="https://example.com/guide",
+                    failure_mode="weak_citation_support",
+                    evidence=["Sampled answer text was not preserved."],
+                    recommended_fix="Capture stronger evidence before escalating the visibility verdict.",
+                    metadata={
+                        "platform": "ChatGPT",
+                        "model_surface": "web search",
+                        "response_summary": "A competing answer looked stronger in manual review.",
+                        "snapshot_id": "snapshot-1",
+                    },
+                )
+            ],
+        )
+
+        sections = build_client_report_sections(
+            report_model,
+            {
+                "geo_scores": {
+                    "geo_score": 68,
+                    "scores": {
+                        "ai_citability": 52,
+                        "brand_authority": 54,
+                        "content_eeat": 64,
+                        "technical": 71,
+                        "schema": 59,
+                        "platform_optimization": 63,
+                    },
+                },
+                "platforms": {"ChatGPT": 72},
+                "page_data": {
+                    "url": "https://example.com",
+                    "title": "Example Co",
+                    "h1_tags": ["Example Co"],
+                    "word_count": 540,
+                },
+                "citability_data": {"average_citability_score": 52},
+                "plugin_results": {},
+                "findings": [],
+                "quick_wins": [],
+                "medium_term": [],
+                "strategic": [],
+            },
+        )
+
+        chatgpt = next(
+            platform
+            for platform in sections["platform_breakdown"]["platforms"]
+            if platform["platform"] == "ChatGPT"
+        )
+        self.assertEqual(chatgpt["observed_visibility_status"], "Directional only in this run")
+        self.assertEqual(chatgpt["confidence"], "low")
+        self.assertEqual(sections["prompt_query_proof"]["rows"], [])
+        self.assertIn("did not capture exact prompts", sections["prompt_query_proof"]["sampling_note"].lower())
+
+    def test_build_client_report_sections_filters_branded_noise_from_top_opportunities(self):
+        report_model = ReportModel(
+            brand_name="Example Co",
+            site_snapshot=SiteSnapshot(
+                url="https://example.com",
+                title="HOME - Example Co",
+                canonical_url="https://example.com",
+            ),
+            query_clusters=[
+                QueryCluster(
+                    label="insurance-comparison",
+                    queries=["insurance comparison"],
+                    search_intent="commercial",
+                    priority="high",
+                    metadata={"seed_topic": "insurance comparison"},
+                )
+            ],
+            plugin_results={
+                "opportunity": {
+                    "opportunities": [
+                        {
+                            "query": "Example Co",
+                            "search_intent": "navigational",
+                            "site_visible": False,
+                            "opportunity_score": 75,
+                            "label": "high",
+                        },
+                        {
+                            "query": "HOME - Example Co",
+                            "search_intent": "navigational",
+                            "site_visible": False,
+                            "opportunity_score": 74,
+                            "label": "high",
+                        },
+                        {
+                            "query": "insurance comparison",
+                            "search_intent": "commercial",
+                            "site_visible": False,
+                            "opportunity_score": 72,
+                            "label": "high",
+                        },
+                    ]
+                }
+            },
+        )
+
+        sections = build_client_report_sections(
+            report_model,
+            {
+                "geo_scores": {
+                    "geo_score": 58,
+                    "scores": {
+                        "ai_citability": 42,
+                        "brand_authority": 51,
+                        "content_eeat": 60,
+                        "technical": 70,
+                        "schema": 56,
+                        "platform_optimization": 49,
+                    },
+                },
+                "platforms": {"ChatGPT": 52},
+                "page_data": {
+                    "url": "https://example.com",
+                    "title": "HOME - Example Co",
+                    "h1_tags": ["Example Co"],
+                    "word_count": 420,
+                },
+                "plugin_results": report_model.plugin_results,
+                "findings": [],
+                "quick_wins": [],
+                "medium_term": [],
+                "strategic": [],
+            },
+        )
+
+        top_opportunity_titles = [
+            item["title"]
+            for item in sections["decision_summary"]["top_opportunities"]
+        ]
+        self.assertIn("insurance comparison", [title.lower() for title in top_opportunity_titles])
+        self.assertNotIn("Example Co", top_opportunity_titles)
+        self.assertNotIn("HOME - Example Co", top_opportunity_titles)
+
+    def test_build_report_sections_treats_llms_as_optional_in_technical_gates(self):
+        report_model = ReportModel(
+            brand_name="Example Co",
+            site_snapshot=SiteSnapshot(
+                url="https://example.com",
+                title="Example Co",
+                canonical_url="https://example.com",
+            ),
+        )
+
+        sections = build_report_sections(
+            report_model,
+            {
+                "geo_scores": {
+                    "geo_score": 52,
+                    "scores": {
+                        "ai_citability": 40,
+                        "brand_authority": 50,
+                        "content_eeat": 60,
+                        "technical": 58,
+                        "schema": 55,
+                        "platform_optimization": 42,
+                    },
+                },
+                "platforms": {"ChatGPT": 51},
+                "page_data": {"h1_tags": ["One", "Two"]},
+                "llms_validation": {"exists": False, "format_valid": False},
+                "crawler_access": {},
+                "plugin_results": {},
+                "findings": [],
+                "quick_wins": [],
+                "medium_term": [],
+                "strategic": [],
+            },
+        )
+
+        gates = sections["technical_geo_gates"]["priority_gates"]
+        self.assertEqual(gates[0]["issue"], "Optional llms.txt discoverability hint")
+        self.assertEqual(gates[0]["severity"], "medium")
+        self.assertIn("optional", gates[0]["why_it_matters"].lower())
+
+    def test_build_client_report_sections_appendix_includes_official_sources(self):
+        report_model = ReportModel(
+            brand_name="Example Co",
+            site_snapshot=SiteSnapshot(
+                url="https://example.com",
+                title="Example Co",
+                canonical_url="https://example.com",
+            ),
+        )
+
+        sections = build_client_report_sections(
+            report_model,
+            {
+                "geo_scores": {
+                    "geo_score": 61,
+                    "scores": {
+                        "ai_citability": 54,
+                        "brand_authority": 55,
+                        "content_eeat": 60,
+                        "technical": 64,
+                        "schema": 58,
+                        "platform_optimization": 52,
+                    },
+                },
+                "platforms": {"ChatGPT": 60},
+                "page_data": {"h1_tags": ["Example Co"]},
+                "citability_data": {"average_citability_score": 54},
+                "llms_validation": {"exists": True, "format_valid": True},
+                "plugin_results": {},
+                "findings": [],
+                "quick_wins": [],
+                "medium_term": [],
+                "strategic": [],
+                "presentation_metadata": {
+                    "run_mode": "agent-assisted",
+                    "driver": "codex",
+                    "guidance": {
+                        "refreshed_at": "2026-03-26T08:00:00Z",
+                        "official_sources": [
+                            "https://developers.google.com/search/docs/appearance/ai-features",
+                            "https://help.openai.com/en/articles/12627856-publishers-and-developers-faq",
+                        ],
+                    },
+                },
+            },
+        )
+
+        self.assertEqual(
+            sections["technical_proof_appendix"]["methodology"]["official_sources"],
+            [
+                "https://developers.google.com/search/docs/appearance/ai-features",
+                "https://help.openai.com/en/articles/12627856-publishers-and-developers-faq",
+            ],
+        )
+
+    def test_build_client_report_sections_appendix_includes_provenance_note_when_metadata_is_present(self):
+        report_model = ReportModel(
+            brand_name="Example Co",
+            site_snapshot=SiteSnapshot(
+                url="https://example.com",
+                title="Example Co",
+                canonical_url="https://example.com",
+            ),
+        )
+
+        sections = build_client_report_sections(
+            report_model,
+            {
+                "geo_scores": {"geo_score": 58, "scores": {"ai_citability": 28}},
+                "platforms": {"ChatGPT": 55},
+                "page_data": {"url": "https://example.com", "title": "Example Co", "h1_tags": ["One"]},
+                "citability_data": {"average_citability_score": 28},
+                "llms_validation": {"exists": False, "format_valid": False},
+                "presentation_metadata": {
+                    "run_mode": "agent-assisted",
+                    "driver": "gemini",
+                    "guidance": {
+                        "refresh_requested": True,
+                        "refreshed_at": "2026-03-25T12:00:00Z",
+                    },
+                },
+            },
+        )
+
+        provenance_note = sections["technical_proof_appendix"]["methodology"]["provenance_note"]
+        self.assertIn("agent-assisted", provenance_note)
+        self.assertIn("gemini", provenance_note)
+        self.assertIn("2026-03-25T12:00:00Z", provenance_note)
 
     def test_build_report_sections_returns_required_keys_and_role_summaries(self):
         report_model = ReportModel(
@@ -447,9 +911,9 @@ class ReportSectionsBuilderTest(unittest.TestCase):
         rendered = report_sections_to_markdown(markdown)
 
         self.assertIn("Priority Gates", rendered)
-        self.assertIn("Missing llms.txt guidance layer", rendered)
+        self.assertIn("Optional AI guidance file (llms.txt) is not published", rendered)
         self.assertIn("Heading hierarchy is diluted", rendered)
-        self.assertIn("Low AI citability", rendered)
+        self.assertIn("Key pages are still hard for AI systems to quote (low citability)", rendered)
 
     def test_report_sections_markdown_uses_competitor_name_labels(self):
         report_model = ReportModel(

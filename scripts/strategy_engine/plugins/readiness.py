@@ -100,31 +100,51 @@ def score_brand_authority(page_data: dict[str, Any], brand_data: dict[str, Any])
 def score_content_eeat(page_data: dict[str, Any]) -> int:
     import re
 
-    score = 35
-    word_count = page_data.get("word_count", 0)
-    if word_count >= 500:
-        score += 10
-    elif word_count >= 300:
-        score += 6
-
+    # Dimensions from geo-content.md (Experience, Expertise, Authoritativeness, Trustworthiness)
+    # Each dimension is 0-25 in the original, here we normalize to 100 total
+    
+    # 1. Experience (Signals of first-hand use)
+    experience = 0
     text_content = page_data.get("text_content", "")
-    if re.search(r"\b[A-Z][a-z]+\s[A-Z][a-z]+\b", text_content):
-        score += 8
-    if re.search(
-        r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b",
-        text_content,
-    ):
-        score += 5
+    if re.search(r"\b(?:I|we|my|our)\b.*\b(?:tested|tried|used|found|observed)\b", text_content, re.I):
+        experience += 10
+    if page_data.get("tables"):
+        experience += 10
+    if page_data.get("images") and any(img.get("alt") for img in page_data.get("images", [])):
+        experience += 5
 
-    meta_tags = page_data.get("meta_tags", {})
-    if meta_tags.get("article:modified_time"):
-        score += 7
+    # 2. Expertise (Credentials and depth)
+    expertise = 0
+    word_count = page_data.get("word_count", 0)
+    if word_count >= 1000:
+        expertise += 10
+    elif word_count >= 500:
+        expertise += 5
+    if re.search(r"\b(?:PhD|MD|MBA|Certif|Expert|Specialist)\b", text_content):
+        expertise += 10
+    if any("/author/" in link.get("url", "") for link in page_data.get("internal_links", [])):
+        expertise += 5
 
-    internal_links = page_data.get("internal_links", [])
-    if any("/author/" in link.get("url", "") for link in internal_links):
-        score += 10
+    # 3. Authoritativeness (Recognition and citations)
+    authority = 0
+    if page_data.get("meta_tags", {}).get("og:site_name"):
+        authority += 5
+    if len(page_data.get("external_links", [])) >= 3:
+        authority += 10
+    if count_social_links(page_data) >= 3:
+        authority += 10
 
-    return clamp_score(score)
+    # 4. Trustworthiness (Transparency and security)
+    trust = 0
+    from urllib.parse import urlparse
+    if urlparse(page_data.get("url", "")).scheme == "https":
+        trust += 10
+    if any(term in text_content.lower() for term in ["privacy", "terms", "contact", "about"]):
+        trust += 10
+    if page_data.get("meta_tags", {}).get("article:modified_time"):
+        trust += 5
+
+    return clamp_score(experience + expertise + authority + trust)
 
 
 def score_technical(
@@ -182,10 +202,10 @@ def score_llms_guidance(llms_validation: Mapping[str, Any]) -> int:
 
     has_issues = bool(llms_validation.get("issues"))
     if llms_validation.get("format_valid") and not has_issues:
-        return 12
+        return 4
     if llms_validation.get("format_valid") or not has_issues:
-        return 7
-    return 4
+        return 2
+    return 1
 
 
 def score_platform_optimization(
@@ -224,12 +244,11 @@ def score_geo_audit(
         page_data, llms_validation, brand_data
     )
 
+    # Weights from geo-ai-visibility.md (Citability 35%, Brand Mentions 30%, Crawler Access 25%, llms.txt 10%)
     geo_score = clamp_score(
-        (ai_citability * 0.25)
-        + (brand_authority * 0.20)
-        + (content_eeat * 0.20)
-        + (technical * 0.15)
-        + (schema * 0.10)
+        (ai_citability * 0.35)
+        + (brand_authority * 0.30)
+        + (technical * 0.25)
         + (platform_optimization * 0.10)
     )
 

@@ -117,15 +117,24 @@ class StrategyWorkflowTest(unittest.TestCase):
                 "client_report_sections": kwargs["client_report_sections"],
             }
 
-        def build_output_paths(brand_name, date_stamp):
-            calls.append(("build_output_paths", brand_name, date_stamp))
+        def build_output_paths(
+            brand_name,
+            date_stamp,
+            *,
+            run_mode="script-only",
+            model_name=None,
+        ):
+            calls.append(("build_output_paths", brand_name, date_stamp, run_mode, model_name))
             return {
                 "report_dir": Path("output/reports/example"),
-                "markdown_path": Path("output/reports/example/GEO-CLIENT-REPORT.md"),
+                "markdown_path": Path("output/reports/example/GEO-STRATEGY-REPORT.md"),
                 "json_path": Path("output/reports/example/audit-data.json"),
-                "pdf_path": Path("output/reports/example/GEO-REPORT.pdf"),
-                "client_pdf_path": Path("output/reports/example/GEO-REPORT.pdf"),
-                "workbook_pdf_path": Path("output/reports/example/GEO-STRATEGIST-WORKBOOK.pdf"),
+                "pdf_path": Path("output/reports/example/GEO-STRATEGY-REPORT.pdf"),
+                "client_pdf_path": Path("output/reports/example/GEO-STRATEGY-REPORT.pdf"),
+                "script_pdf_path": Path("output/reports/example/GEO-STRATEGY-REPORT.pdf"),
+                "assisted_pdf_path": Path("output/reports/example/GEO-STRATEGY-REPORT.pdf"),
+                "script_markdown_path": Path("output/reports/example/GEO-STRATEGY-REPORT.md"),
+                "assisted_markdown_path": Path("output/reports/example/GEO-STRATEGY-REPORT.md"),
             }
 
         def render_markdown_report(data):
@@ -140,9 +149,6 @@ class StrategyWorkflowTest(unittest.TestCase):
 
         def generate_report(data, output_path):
             calls.append(("generate_report", output_path, data["brand_name"]))
-
-        def generate_workbook_report(data, output_path):
-            calls.append(("generate_workbook_report", output_path, data["brand_name"]))
 
         class FakeReport:
             def __init__(self):
@@ -202,22 +208,47 @@ class StrategyWorkflowTest(unittest.TestCase):
             write_text=write_text,
             write_json=write_json,
             generate_report=generate_report,
-            generate_workbook_report=generate_workbook_report,
+            generate_workbook_report=generate_report,
             orchestrator_cls=FakeStrategyOrchestrator,
         )
 
-        result = run_strategy_report("https://example.com", deps=deps)
+        result = run_strategy_report(
+            "https://example.com",
+            deps=deps,
+            presentation_metadata={
+                "run_mode": "agent-assisted",
+                "driver": "gemini",
+                "model": "gpt-5.4",
+                "guidance": {
+                    "refresh_requested": True,
+                    "refreshed_at": "2026-03-25T12:00:00Z",
+                },
+            },
+        )
 
         self.assertEqual(result["brand_name"], "Example Co")
         self.assertTrue(any(call[0] == "write_text" for call in calls))
         self.assertTrue(any(call[0] == "write_json" for call in calls))
         self.assertTrue(any(call[0] == "generate_report" for call in calls))
-        self.assertTrue(any(call[0] == "generate_workbook_report" for call in calls))
         self.assertTrue(any(call[0] == "build_client_report_sections" for call in calls))
-        self.assertEqual(result["pdf_path"], str(Path("output/reports/example/GEO-REPORT.pdf")))
+        self.assertIn(
+            ("build_output_paths", "Example Co", "2026-03-20", "agent-assisted", "gpt-5.4"),
+            calls,
+        )
+        self.assertEqual(result["presentation_metadata"]["run_mode"], "agent-assisted")
+        self.assertEqual(result["presentation_metadata"]["model"], "gpt-5.4")
+        self.assertTrue(result["presentation_metadata"]["guidance"]["refresh_requested"])
         self.assertEqual(
-            result["workbook_pdf_path"],
-            str(Path("output/reports/example/GEO-STRATEGIST-WORKBOOK.pdf")),
+            result["pdf_path"],
+            str(Path("output/reports/example/GEO-STRATEGY-REPORT.pdf")),
+        )
+        self.assertEqual(
+            result["client_pdf_path"],
+            str(Path("output/reports/example/GEO-STRATEGY-REPORT.pdf")),
+        )
+        self.assertEqual(
+            result["markdown_path"],
+            str(Path("output/reports/example/GEO-STRATEGY-REPORT.md")),
         )
 
 

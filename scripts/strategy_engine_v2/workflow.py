@@ -299,7 +299,7 @@ def _load_previous_comparison_context(
             "change_points": 0,
         }
 
-    search_root = reports_dir or Path(__file__).resolve().parents[2] / "output" / "reports"
+    search_root = reports_dir or Path(__file__).resolve().parents[2] / "output" / "reports-v2"
     if not search_root.exists():
         return {
             "current_snapshot": current_snapshot,

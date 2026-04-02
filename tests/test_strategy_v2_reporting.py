@@ -93,6 +93,51 @@ def test_v2_report_reuses_v1_sections_when_bridge_data_exists():
     assert sections["action_plan"]["actions"][0]["action"] == "Rewrite key pages into answer-first blocks with facts and citations."
 
 
+def test_v2_report_normalizes_client_action_plan_rows():
+    payload = sample_v1_audit_payload()
+    payload["client_report_sections"]["action_plan_30_60_90"] = {
+        "actions": [
+            {
+                "time_horizon": "30_days",
+                "action": "Rewrite key pages into answer-first blocks with facts, citations, and concise paragraphs.",
+                "owner": "marketing",
+                "expected_outcome": "Re-measure AI citability, cited passages, AI referral traffic, and assisted conversions after the content refresh.",
+            },
+            {
+                "time_horizon": "30_days",
+                "action": "Increase content self-containment; ensure 'Answer Blocks' remain accurate even when extracted from their surrounding context.",
+                "owner": "marketing",
+                "expected_outcome": "Track the before/after metric tied to this finding and confirm whether citations, referrals, or conversions improve.",
+            },
+            {
+                "time_horizon": "30_days",
+                "action": "Fact density is below GEO benchmarks. Target 1-2 specific entities or data points per 'Answer Block'.",
+                "owner": "cross-functional",
+                "expected_outcome": "Track the before/after metric tied to this finding and confirm whether citations, referrals, or conversions improve.",
+            },
+        ]
+    }
+    sections = build_v2_report_sections(
+        {
+            "manifest": {"mode": "script-only"},
+            "evidence": {"items": [{"evidence_type": "run_manifest"}]},
+            "adjudication": {
+                "benchmark": {"status": "omitted", "reason": "", "warning": ""},
+                "prompt_proof": {"status": "omitted", "reason": "", "warning": ""},
+                "platform_breakdown": {"status": "omitted", "reason": "", "warning": ""},
+                "change_since_last_run": {"status": "omitted", "reason": "", "warning": ""},
+            },
+            "audit_data": payload,
+        }
+    )
+
+    actions = sections["action_plan"]["actions"]
+    assert len(actions) == 3
+    assert any("quote-ready passages" in item["expected_outcome"].lower() for item in actions)
+    assert any("out of surrounding page context" in item["expected_outcome"].lower() for item in actions)
+    assert any("specific proof points" in item["expected_outcome"].lower() for item in actions)
+
+
 def test_v2_report_merges_legacy_proof_with_bridge_warnings():
     manifest = {
         "target_url": "https://www.transglobalus.com/",

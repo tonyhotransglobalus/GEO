@@ -161,13 +161,21 @@ def _scorecard_rows(audit_data: Mapping[str, Any]) -> list[dict[str, Any]]:
         "schema": "Schema",
         "platform_optimization": "Platform Optimization",
     }
+    explanations = {
+        "ai_citability": "How easily priority pages can be quoted, summarized, and attributed in AI answers.",
+        "brand_authority": "How strongly the brand is reinforced by entity signals, references, and trust cues.",
+        "content_eeat": "How clearly the content demonstrates experience, expertise, authority, and trust.",
+        "technical": "How reliably the site can be crawled, rendered, and understood by search systems.",
+        "schema": "How well structured data helps machines interpret key entities and page meaning.",
+        "platform_optimization": "How prepared the site is for platform-specific AI search behaviors and surfaces.",
+    }
     for key, label in labels.items():
         if key in component_scores:
             rows.append(
                 {
                     "label": label,
                     "score": component_scores[key],
-                    "plain_english": "Bridge mode reuses this component from the V1 audit model.",
+                    "plain_english": explanations.get(key, ""),
                 }
             )
     return rows
@@ -185,6 +193,12 @@ def _bridge_action_visible_reason(action: Mapping[str, Any], adjudication: Mappi
         return "Technical hardening is not the top blocker, but it remains a medium-term support task in the bridged backlog."
     if any(token in action_text for token in ("entity", "profile", "wikidata", "authority")):
         return "Entity and trust signals remain thin, so this action supports stronger attribution and brand reinforcement."
+    if "fact density" in action_text or "data points" in action_text or "entities" in action_text:
+        return "The current pages do not carry enough proof-rich detail, so this action strengthens the evidence AI systems can lift into answers."
+    if "answer block" in action_text or "self-containment" in action_text or "extracted" in action_text:
+        return "Important answers still depend too much on surrounding page context, so this action makes key passages more self-contained."
+    if "high-intent user questions" in action_text or "questions directly" in action_text:
+        return "The audit surfaced clear question demand, so this action expands coverage for the service questions users are already asking."
     if any(token in action_text for token in ("answer-first", "citations", "citability", "content")):
         return "Citability is weak on priority pages, so this action supports clearer answer-first content and proof."
     if "quick" in evidence_basis or "benchmark" in evidence_basis:
@@ -216,6 +230,10 @@ def _legacy_action_expected_outcome(action: Mapping[str, Any]) -> str:
         return "Confirm the file is published, maintained, and monitored without treating it as the primary visibility lever."
     if "heading" in action_text:
         return "Make the homepage and service pages easier for users and answer engines to parse in the next audit."
+    if "fact density" in action_text or "data points" in action_text or "entities" in action_text:
+        return "Increase the number of specific proof points AI systems can cite instead of forcing them to summarize vague marketing copy."
+    if "answer block" in action_text or "self-containment" in action_text or "extracted" in action_text:
+        return "Make priority answers easier to quote correctly even when an AI system pulls them out of surrounding page context."
     if any(token in action_text for token in ("entity", "profile", "wikidata", "authority")):
         return "Strengthen the brand's authority signals so answer engines can connect the company to its services more confidently."
     if any(token in action_text for token in ("answer-first", "citations", "citability")):
@@ -237,13 +255,43 @@ def _legacy_action_theme(action: Mapping[str, Any]) -> str:
         return "heading_structure"
     if any(token in action_text for token in ("entity", "profile", "wikidata", "authority")):
         return "entity_authority"
-    if any(token in action_text for token in ("answer-first", "citations", "citability", "questions directly", "recurring ai-native content")):
+    if "fact density" in action_text or "data points" in action_text or "entities" in action_text:
+        return "content_proof_density"
+    if "answer block" in action_text or "self-containment" in action_text or "extracted" in action_text:
+        return "content_extractability"
+    if any(token in action_text for token in ("questions directly", "recurring ai-native content")):
+        return "content_question_coverage"
+    if any(token in action_text for token in ("answer-first", "citations", "citability")):
         return "content_citability"
     if "content-security-policy" in action_text or "security headers" in action_text:
         return "technical_hardening"
     if "track ai visibility" in action_text or "kpis" in action_text:
         return "measurement_loop"
     return action_text or "action"
+
+
+def _is_generic_expected_outcome(value: Any) -> bool:
+    text = _normalized_text(value)
+    if not text:
+        return True
+    generic_markers = (
+        "track the before/after metric tied to this action",
+        "track the before/after metric tied to this finding",
+        "re-measure ai citability, cited passages, ai referral traffic, and assisted conversions after the content refresh.",
+        "if published, monitor crawler access logs and any downstream citation or referral changes rather than expecting ranking movement by itself.",
+        "verify one h1 per priority page, then track changes in engagement, excerpt quality, and citation pickup.",
+    )
+    return any(marker in text for marker in generic_markers)
+
+
+def _normalize_action_row(action: Mapping[str, Any], adjudication: Mapping[str, Any], *, label: str) -> dict[str, Any]:
+    row = dict(action)
+    row["time_horizon"] = label
+    row["owner"] = _legacy_action_owner(row)
+    if _is_generic_expected_outcome(row.get("expected_outcome")):
+        row["expected_outcome"] = _legacy_action_expected_outcome(row)
+    row["visible_reason"] = _bridge_action_visible_reason(row, adjudication)
+    return row
 
 
 def _has_finding_section(findings: list[dict[str, Any]], section_name: str) -> bool:
@@ -699,11 +747,17 @@ def _action_plan(report_input: Mapping[str, Any]) -> dict[str, Any]:
     change = _mapping(adjudication.get("change_since_last_run"))
     if _sequence(action_plan_section.get("actions")):
         actions: list[dict[str, Any]] = []
+        seen_themes: set[tuple[str, str]] = set()
         for item in _sequence(action_plan_section.get("actions")):
             if not isinstance(item, Mapping):
                 continue
-            row = dict(item)
-            row["visible_reason"] = _bridge_action_visible_reason(row, adjudication)
+            label = _string(item.get("time_horizon")) or "30_days"
+            row = _normalize_action_row(item, adjudication, label=label)
+            theme = _legacy_action_theme(row)
+            marker = (label, theme)
+            if marker in seen_themes:
+                continue
+            seen_themes.add(marker)
             actions.append(row)
         return {
             "title": "Action Plan",
@@ -724,13 +778,8 @@ def _action_plan(report_input: Mapping[str, Any]) -> dict[str, Any]:
                 if theme in seen_themes:
                     continue
                 seen_themes.add(theme)
-                row = {
-                    "time_horizon": label,
-                    "action": _string(item.get("action")),
-                    "owner": _legacy_action_owner(item),
-                    "expected_outcome": _legacy_action_expected_outcome(item),
-                    "visible_reason": _bridge_action_visible_reason(item, adjudication),
-                }
+                row = _normalize_action_row(item, adjudication, label=label)
+                row["action"] = _string(item.get("action"))
                 actions.append(row)
         if actions:
             return {
@@ -838,9 +887,9 @@ def build_v2_report_sections(report_input: Mapping[str, Any] | None) -> dict[str
     geo_score = audit_data.get("geo_score")
     if geo_score is not None and "geo score" not in _normalized_text(executive_summary):
         leadership_summary.append(f"Bridged GEO score from the live audit: {geo_score}/100.")
-    else:
-        leadership_summary.append(f"Run mode: {_string(manifest.get('mode')) or 'script-only'}.")
-    leadership_summary.append(f"Evidence items captured: {evidence_count}.")
+    leadership_summary.append(
+        "This version keeps the leadership layer short while pushing lower-confidence proof into later sections."
+    )
 
     sections = {
         "leadership_summary": {

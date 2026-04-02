@@ -12,6 +12,7 @@ the same stable report path as `geo-strategy-report`.
 ## Command
 
 ```powershell
+# When running within Antigravity or Codex, no extra flags are needed
 .\.venv\Scripts\python.exe scripts\strategy_report.py https://www.transglobalus.com/ --non-interactive
 ```
 

@@ -9,6 +9,8 @@ from unittest.mock import patch
 from reportlab.platypus import Paragraph
 
 from scripts.strategy_engine.pdf import (
+    build_structured_item_card,
+    build_styles,
     generate_report,
     generate_workbook_report,
     wrap_table_rows,
@@ -65,7 +67,12 @@ class FullAuditHelpersTest(unittest.TestCase):
         self.addCleanup(self._serp_snapshot_patch.stop)
 
     def test_output_paths_use_central_report_folder(self):
-        paths = build_output_paths("Example Co", "2026-03-17")
+        paths = build_output_paths(
+            "Example Co",
+            "2026-03-17",
+            run_mode="agent-assisted",
+            model_name="gpt-5.4",
+        )
 
         self.assertEqual(
             paths["report_dir"],
@@ -73,7 +80,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         )
         self.assertEqual(
             paths["markdown_path"],
-            Path("output/reports/example-co-2026-03-17/GEO-CLIENT-REPORT.md"),
+            Path("output/reports/example-co-2026-03-17/GEO-STRATEGY-REPORT.md"),
         )
         self.assertEqual(
             paths["json_path"],
@@ -81,13 +88,40 @@ class FullAuditHelpersTest(unittest.TestCase):
         )
         self.assertEqual(
             paths["pdf_path"],
-            Path("output/reports/example-co-2026-03-17/GEO-REPORT.pdf"),
+            Path("output/reports/example-co-2026-03-17/GEO-STRATEGY-REPORT.pdf"),
         )
-        self.assertEqual(paths["pdf_path"], paths["client_pdf_path"])
         self.assertEqual(
-            paths["workbook_pdf_path"],
-            Path("output/reports/example-co-2026-03-17/GEO-STRATEGIST-WORKBOOK.pdf"),
+            paths["client_pdf_path"],
+            Path("output/reports/example-co-2026-03-17/GEO-STRATEGY-REPORT.pdf"),
         )
+        self.assertEqual(
+            paths["assisted_pdf_path"],
+            Path("output/reports/example-co-2026-03-17/GEO-STRATEGY-REPORT.pdf"),
+        )
+        self.assertEqual(
+            paths["script_pdf_path"],
+            Path("output/reports/example-co-2026-03-17/GEO-STRATEGY-REPORT.pdf"),
+        )
+        self.assertEqual(
+            paths["script_markdown_path"],
+            Path("output/reports/example-co-2026-03-17/GEO-STRATEGY-REPORT.md"),
+        )
+        self.assertEqual(
+            paths["assisted_markdown_path"],
+            Path("output/reports/example-co-2026-03-17/GEO-STRATEGY-REPORT.md"),
+        )
+
+    def test_build_structured_item_card_uses_action_as_title_when_present(self):
+        card = build_structured_item_card(
+            {
+                "action": "Publish llms.txt.",
+                "expected_outcome": "Clearer crawl guidance.",
+            },
+            build_styles(),
+            400,
+        )
+
+        self.assertEqual(card._cellvalues[0][0].text, "Publish llms.txt.")
 
     def test_cli_only_requires_url(self):
         args = parse_args(["https://example.com"])
@@ -636,7 +670,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         self.assertIn("P0", advisory["priority_actions"])
         self.assertIn("P1", advisory["priority_actions"])
         self.assertTrue(
-            any("llms.txt" in item for item in advisory["priority_actions"]["P1"])
+            any("llms.txt" in item for item in advisory["priority_actions"]["P2"])
         )
         self.assertTrue(
             any("H1" in item for item in advisory["priority_actions"]["P1"])
@@ -665,7 +699,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         )
 
         self.assertTrue(
-            any("llms.txt" in item for item in advisory["priority_actions"]["P1"])
+            any("llms.txt" in item for item in advisory["priority_actions"]["P2"])
         )
 
     def test_build_executive_summary_mentions_malformed_llms_guidance(self):
@@ -683,7 +717,10 @@ class FullAuditHelpersTest(unittest.TestCase):
             rescience_pass={"summary": "Optimization pass summary"},
         )
 
-        self.assertIn("exists but the guidance layer is malformed", summary)
+        self.assertIn(
+            "optional llms.txt guidance file exists but needs cleanup",
+            summary,
+        )
 
     def test_build_findings_distinguishes_malformed_llms_from_missing(self):
         findings = build_findings(
@@ -1113,7 +1150,7 @@ class FullAuditHelpersTest(unittest.TestCase):
         self.assertIsInstance(wrapped[0][0], Paragraph)
         self.assertIsInstance(wrapped[1][1], Paragraph)
 
-    def test_client_pdf_generation_uses_client_brief_structure_and_excludes_workbook_sections(self):
+    def test_client_pdf_generation_uses_combined_report_sections_and_excludes_workbook_sections(self):
         report_data = {
             "url": "https://example.com",
             "brand_name": "Example Co",
@@ -1160,50 +1197,221 @@ class FullAuditHelpersTest(unittest.TestCase):
                 "geo_methods": [{"method": "Cite Sources", "impact": "+40%"}],
             },
             "client_report_sections": {
-                "cover": {
-                    "title": "GEO Client Brief",
-                    "subtitle": "Executive summary for Example Co",
-                    "readiness_snapshot": [
-                        {"label": "GEO", "value": "52/100"},
-                        {"label": "AI Citability", "value": "28/100"},
-                    ],
+                "cover_verdict": {
+                    "brand_name": "Example Co",
+                    "primary_domain": "example.com",
+                    "audit_date": "2026-03-17",
+                    "analysis_window": "Point-in-time audit",
+                    "verdict_status": "not_yet_competitive",
+                    "one_sentence_verdict": "Example Co is technically available but not yet competitive in AI visibility.",
+                    "overall_confidence": "medium",
+                    "confidence_reason": "Competitor sampling is sparse.",
+                    "sample_completeness": "thin",
                 },
                 "decision_summary": {
-                    "overview": "Example Co has a workable technical base but weak AI citation readiness.",
+                    "what_is_working": ["The technical base is workable."],
+                    "what_is_not_working": ["AI citation readiness is weak."],
+                    "top_blockers": [
+                        {
+                            "title": "Low citation readiness",
+                            "severity": "critical",
+                            "business_impact": "The brand is missing AI-assisted discovery demand.",
+                            "evidence_class": "internal_score",
+                            "confidence": "medium",
+                        }
+                    ],
+                    "top_opportunities": [
+                        {
+                            "title": "Answer-first service pages",
+                            "why_now": "High-intent queries are still open.",
+                            "expected_outcome": "Improved citation pickup for priority topics.",
+                            "confidence": "medium",
+                        }
+                    ],
+                    "leadership_takeaway": "Example Co has a workable technical base but weak AI citation readiness.",
+                    "top_3_actions": [
+                        {
+                            "action": "Publish llms.txt.",
+                            "owner": "developers",
+                            "expected_outcome": "Cleaner crawl guidance.",
+                        }
+                    ],
                 },
-                "priority_risks": {
+                "score_definitions": {
+                    "term_guide": [
+                        {
+                            "term": "Confidence",
+                            "plain_english": "How much to trust the current readout.",
+                        },
+                        {
+                            "term": "Directional",
+                            "plain_english": "An early signal, not final proof from exact prompt captures.",
+                        },
+                    ],
+                    "weighting": {
+                        "summary": "The GEO Score is a weighted blend of content, authority, technical access, schema, and platform readiness.",
+                        "components": [
+                            {
+                                "metric_name": "AI Citability",
+                                "weight": 25,
+                                "why_this_weight_exists": "Reusable, proof-rich passages most directly support AI citation pickup.",
+                            }
+                        ],
+                    },
+                    "metrics": [
+                        {
+                            "metric_key": "geo_score",
+                            "metric_name": "GEO Score",
+                            "score": 52,
+                            "plain_english_definition": "Overall AI visibility readiness.",
+                            "what_good_looks_like": "Strong technical access and answer-ready proof-rich pages.",
+                            "why_this_score_landed_here": "Technical foundations are stronger than citation readiness.",
+                            "primary_evidence_used": ["live_site", "internal_score"],
+                            "confidence": "medium",
+                        }
+                    ]
+                },
+                "priority_findings": {
                     "items": [
                         {
                             "title": "Low citation readiness",
-                            "business_impact": "The brand is missing AI-assisted discovery demand.",
-                            "evidence": "Citability scored 28/100.",
+                            "severity": "critical",
+                            "plain_english_summary": "AI systems do not have enough proof-rich passages to reuse confidently.",
+                            "what_we_observed": "Citability scored 28/100.",
+                            "why_it_matters_to_business": "The brand is missing AI-assisted discovery demand.",
+                            "evidence_class": "internal_score",
+                            "proof": "Citability scored 28/100.",
+                            "confidence": "medium",
+                            "counterpoint_or_limitation": "This is a point-in-time sample.",
+                            "marketing_action": "Rewrite service pages into answer-first blocks with stronger proof points.",
+                            "engineering_action": "Support clearer heading hierarchy and FAQ/schema placement.",
+                            "success_metric": "Higher citation pickup on re-run.",
+                            "affected_pages_or_queries": ["example ai visibility"],
                         }
                     ]
                 },
-                "top_opportunities": {
-                    "items": [
-                        {
-                            "title": "Answer-first service pages",
-                            "why_it_matters": "High-intent queries are still open.",
-                            "priority": "high",
-                        }
-                    ]
-                },
-                "market_snapshot": {
-                    "title": "Market Visibility Snapshot",
+                "competitive_benchmark": {
                     "summary": "The competitive picture is still incomplete in this sample, so this page highlights the known gap rather than forcing a weak benchmark.",
-                    "confidence": "limited",
+                    "competitor_set": ["Competitor A"],
+                    "sample_scope": {"sample_completeness": "thin"},
                     "benchmark_rows": [],
                 },
-                "roadmap": {
-                    "thirty_day": ["Publish llms.txt."],
-                    "sixty_day": ["Improve schema."],
-                    "ninety_day": ["Build recurring GEO content."],
+                "platform_breakdown": {
+                    "platforms": [
+                        {
+                            "platform": "ChatGPT",
+                            "documented_behavior": "Uses web retrieval when available.",
+                            "observed_site_status": "Accessible",
+                            "observed_visibility_status": "Weak",
+                            "cautious_inference": "The site needs stronger answer blocks.",
+                            "recommended_actions": ["Improve proof-rich pages."],
+                            "official_sources": ["https://openai.com/gptbot"],
+                            "last_verified_at": "2026-03-17",
+                            "confidence": "medium",
+                        }
+                    ]
                 },
-                "methodology": {
-                    "summary": "Point-in-time GEO audit based on live crawl, content scoring, and visibility sampling.",
-                    "confidence_note": "Competitor data is sparse in this run.",
+                "prompt_query_proof": {
+                    "rows": [
+                        {
+                            "query_or_prompt": "example ai visibility",
+                            "query_theme": "AI visibility",
+                            "platform": "ChatGPT",
+                            "model_surface": "web search",
+                            "locale": "en-US",
+                            "capture_timestamp": "2026-03-17T00:00:00Z",
+                            "brand_mentioned": False,
+                            "brand_cited": False,
+                            "winning_domains": ["competitor-a.com"],
+                            "winning_urls": ["https://competitor-a.com/guide"],
+                            "response_summary": "Competitor A was more visible.",
+                            "why_we_lost_or_won": "Example Co lacked stronger proof-rich passages.",
+                            "evidence_link_or_snapshot_id": "snapshot-1",
+                            "confidence": "medium",
+                        }
+                    ]
                 },
+                "page_source_evidence": {
+                    "priority_pages": [
+                        {
+                            "page_url": "https://example.com",
+                            "page_type": "homepage",
+                            "citability_score": 28,
+                            "technical_observations": ["Two H1 tags dilute the message."],
+                            "content_observations": ["Proof-rich answer blocks are missing."],
+                            "schema_observations": ["Schema needs expansion."],
+                            "trust_observations": ["Entity support is thin."],
+                            "recommended_fix": "Tighten headings and add proof-rich sections.",
+                            "confidence": "medium",
+                        }
+                    ],
+                    "source_domains": [
+                        {
+                            "domain": "competitor-a.com",
+                            "source_type": "competitor",
+                            "why_it_matters": "A direct competitor is winning sampled visibility.",
+                            "observed_role_in_answers": "Cited in sampled answers.",
+                            "gap_or_advantage": "Competitor proof appears stronger.",
+                        }
+                    ],
+                    "entity_signal_review": {"same_as_count": 0},
+                },
+                "action_plan_30_60_90": {
+                    "actions": [
+                        {
+                            "time_horizon": "30_days",
+                            "action": "Publish llms.txt.",
+                            "owner": "developers",
+                            "effort": "low",
+                            "dependency": "robots.txt remains accessible",
+                            "expected_outcome": "Clearer crawl guidance.",
+                            "success_metric": "llms.txt is live and valid.",
+                            "evidence_basis": "technical review",
+                            "confidence": "medium",
+                        },
+                        {
+                            "time_horizon": "60_days",
+                            "action": "Improve schema.",
+                            "owner": "developers",
+                            "effort": "medium",
+                            "dependency": "content model updates",
+                            "expected_outcome": "Stronger machine-readable entity support.",
+                            "success_metric": "Schema score improves.",
+                            "evidence_basis": "schema observations",
+                            "confidence": "medium",
+                        },
+                        {
+                            "time_horizon": "90_days",
+                            "action": "Build recurring GEO content.",
+                            "owner": "marketing",
+                            "effort": "high",
+                            "dependency": "editorial resourcing",
+                            "expected_outcome": "Better answer coverage for open topics.",
+                            "success_metric": "More sampled topic wins.",
+                            "evidence_basis": "opportunity analysis",
+                            "confidence": "medium",
+                        },
+                    ]
+                },
+                    "technical_proof_appendix": {
+                        "methodology": {
+                            "summary": "Point-in-time GEO audit based on live crawl, content scoring, and visibility sampling.",
+                            "confidence_note": "Competitor data is sparse in this run.",
+                        },
+                        "crawl_and_fetch_evidence": ["Homepage crawl succeeded."],
+                        "robots_and_bot_access": [
+                            {
+                                "crawler": "GPTBot",
+                                "platform": "ChatGPT",
+                                "status": "Allowed",
+                                "recommendation": "Keep GPTBot allowed unless legal or security policy changes.",
+                            }
+                        ],
+                        "dom_and_heading_proof": ["Two H1 tags were observed."],
+                        "schema_proof": ["Schema support is limited."],
+                        "source_inventory": ["competitor-a.com"],
+                        "limitations": {"limitations_note": "Competitor data is sparse in this run."},
+                    },
             },
         }
 
@@ -1220,16 +1428,25 @@ class FullAuditHelpersTest(unittest.TestCase):
             )
             pdf_text = txt_path.read_text(encoding="utf-8")
 
+        self.assertIn("Cover + Verdict", pdf_text)
         self.assertIn("Decision Summary", pdf_text)
-        self.assertIn("Top Risks", pdf_text)
-        self.assertIn("Top Opportunities", pdf_text)
-        self.assertIn("Market Visibility Snapshot", pdf_text)
-        self.assertIn("30/60/90 Roadmap", pdf_text)
-        self.assertIn("Methodology and Confidence", pdf_text)
+        self.assertIn("What The Scores Mean", pdf_text)
+        self.assertIn("Competitive Benchmark", pdf_text)
+        self.assertIn("30/60/90 Action Plan", pdf_text)
+        self.assertIn("Technical Proof Appendix", pdf_text)
+        self.assertIn("Term Guide", pdf_text)
+        self.assertIn("Scoring And Weighting", pdf_text)
+        self.assertIn("How much to trust this read", pdf_text)
+        self.assertIn("GPTBot", pdf_text)
+        self.assertIn("ChatGPT", pdf_text)
+        self.assertIn("example ai visibility", pdf_text)
         self.assertIn("competitive picture is still incomplete", pdf_text.lower())
+        self.assertIn("Publish llms.txt.", pdf_text)
         self.assertNotIn("Developer Appendix", pdf_text)
         self.assertNotIn("Citation Diagnosis", pdf_text)
         self.assertNotIn("Evidence and Methodology Appendix", pdf_text)
+        self.assertNotIn("Powered by ReScience AI", pdf_text)
+        self.assertNotIn("ReScience", pdf_text)
 
     def test_workbook_pdf_generation_with_report_sections_renders_strategist_headings(self):
         report_data = {
@@ -1305,7 +1522,7 @@ class FullAuditHelpersTest(unittest.TestCase):
             )
             pdf_text = txt_path.read_text(encoding="utf-8")
 
-        self.assertIn("Decision Summary", pdf_text)
+        self.assertIn("Executive Summary", pdf_text)
         self.assertIn("Query Universe", pdf_text)
         self.assertIn("Competitor Visibility", pdf_text)
         self.assertIn("Competitor A", pdf_text)

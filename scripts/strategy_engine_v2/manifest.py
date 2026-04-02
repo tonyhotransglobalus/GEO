@@ -41,7 +41,7 @@ def build_run_manifest(
         "model": model,
         "interactive": interactive,
         "shadow_run": shadow_run,
-        "run_timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "run_timestamp": datetime.now(timezone.utc).isoformat(timespec="microseconds"),
         "comparison_eligibility": {
             "requested": compare_to_v1,
             "eligible": compare_to_v1,

@@ -126,8 +126,8 @@ class ReadinessPluginTest(unittest.TestCase):
 
         self.assertEqual(readiness["geo_scores"]["geo_score"], 68)
         self.assertEqual(readiness["geo_scores"]["scores"]["technical"], 90)
-        self.assertEqual(readiness["platforms"]["ChatGPT"], 71)
-        self.assertEqual(readiness["platforms"]["Google AI Overviews"], 67)
+        self.assertEqual(readiness["platforms"]["ChatGPT"], 63)
+        self.assertEqual(readiness["platforms"]["Google AI Overviews"], 52)
         self.assertTrue(
             readiness["inputs"]["brand_data"]["platforms"]["wikipedia"]["has_wikipedia_page"]
         )
@@ -311,6 +311,76 @@ class ReadinessPluginTest(unittest.TestCase):
         ).plugin_results["readiness"]["geo_scores"]["scores"]["platform_optimization"]
 
         self.assertGreater(valid, invalid)
+
+    def test_readiness_llms_bonus_is_small_optional_signal(self):
+        base_inputs = {
+            "page_data": {
+                "url": "https://example.com",
+                "title": "Example Co",
+                "word_count": 420,
+                "text_content": "Jane Smith wrote this in March about Example Co.",
+                "meta_tags": {"article:modified_time": "2026-03-18"},
+                "internal_links": [{"url": "https://example.com/author/jane"}],
+                "external_links": [
+                    {"url": "https://www.linkedin.com/company/example"}
+                ],
+                "structured_data": [],
+                "status_code": 200,
+                "has_ssr_content": True,
+                "security_headers": {
+                    "Strict-Transport-Security": "max-age=31536000",
+                },
+            },
+            "robots_data": {"exists": True},
+            "llms_live": {"llms_txt": {"exists": True}},
+            "sitemap_pages": ["https://example.com/"],
+            "citability_data": {"average_citability_score": 65.0},
+            "brand_data": {},
+            "rescience_pass": {},
+        }
+
+        without_llms = StrategyOrchestrator(
+            [
+                ReadinessPlugin(
+                    ReadinessInputs(
+                        **base_inputs,
+                        llms_validation={"exists": False, "format_valid": False, "issues": []},
+                    )
+                )
+            ]
+        ).execute(
+            AnalysisContext(
+                site_snapshot=SiteSnapshot(
+                    url="https://example.com",
+                    title="Example Co",
+                    canonical_url="https://example.com",
+                    fetched_at="2026-03-19T10:00:00Z",
+                )
+            )
+        ).plugin_results["readiness"]["geo_scores"]["scores"]["platform_optimization"]
+
+        with_llms = StrategyOrchestrator(
+            [
+                ReadinessPlugin(
+                    ReadinessInputs(
+                        **base_inputs,
+                        llms_validation={"exists": True, "format_valid": True, "issues": []},
+                    )
+                )
+            ]
+        ).execute(
+            AnalysisContext(
+                site_snapshot=SiteSnapshot(
+                    url="https://example.com",
+                    title="Example Co",
+                    canonical_url="https://example.com",
+                    fetched_at="2026-03-19T10:00:00Z",
+                )
+            )
+        ).plugin_results["readiness"]["geo_scores"]["scores"]["platform_optimization"]
+
+        self.assertGreater(with_llms, without_llms)
+        self.assertLessEqual(with_llms - without_llms, 4)
 
 
 if __name__ == "__main__":

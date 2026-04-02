@@ -320,6 +320,29 @@ def test_load_previous_comparison_context_reads_latest_compatible_run(tmp_path):
     assert context["change_points"] >= 1
 
 
+def test_run_strategy_report_v2_treats_stable_comparable_run_as_supported(tmp_path):
+    deps = sample_v2_workflow_deps()
+
+    first = run_strategy_report_v2(
+        "https://www.transglobalus.com/",
+        shadow_run=False,
+        compare_to_v1=True,
+        reports_dir=tmp_path,
+        deps=deps,
+    )
+    second = run_strategy_report_v2(
+        "https://www.transglobalus.com/",
+        shadow_run=False,
+        compare_to_v1=True,
+        reports_dir=tmp_path,
+        deps=deps,
+    )
+
+    assert first["adjudication"]["change_since_last_run"]["status"] in {"omitted", "decision-grade"}
+    assert second["adjudication"]["change_since_last_run"]["status"] == "decision-grade"
+    assert "unsupported_change_since_last_run" not in second["qa"]["issues"]
+
+
 def test_run_v1_audit_tolerates_opportunity_timeouts(monkeypatch):
     def fake_orchestrate_audit(*args, **kwargs):
         keyword_suggestions = workflow_module.opportunity_plugin.fetch_keyword_suggestions(

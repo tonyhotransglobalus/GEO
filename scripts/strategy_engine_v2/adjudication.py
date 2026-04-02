@@ -418,9 +418,9 @@ def classify_change_since_last_run_section(
         )
     if change_points == 0:
         return _build_result(
-            "omitted",
-            "Comparison is eligible, but no comparable change points were captured.",
-            "Change-since-last-run is omitted because no comparable change points were captured.",
+            "decision-grade",
+            "A comparable prior run exists and no material change points were detected.",
+            "",
         )
     if change_points >= ADJUDICATION_THRESHOLDS["change_since_last_run"]["decision_grade_changes"]:
         return _build_result(

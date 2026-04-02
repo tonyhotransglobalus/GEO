@@ -28,3 +28,24 @@ def test_v2_pdf_renders_core_sections(tmp_path):
     assert "Competitive Benchmark" in text
     assert "30/60/90 Action Plan" in text
     assert "Proof Appendix" in text
+    assert "Top Priorities Now" in text
+    assert "Glossary" in text
+
+
+def test_v2_pdf_omits_debug_style_copy_and_repetitive_bridge_rows(tmp_path):
+    result = run_strategy_report_v2(
+        "https://www.transglobalus.com/",
+        shadow_run=False,
+        compare_to_v1=True,
+        reports_dir=tmp_path,
+        deps=sample_v2_workflow_deps(),
+    )
+
+    pdf_path = Path(result["artifact_paths"]["pdf_path"])
+    reader = PdfReader(str(pdf_path))
+    text = "\n".join((page.extract_text() or "") for page in reader.pages)
+
+    assert "Evidence items captured" not in text
+    assert "Bridge mode reuses this component from the V1 audit model." not in text
+    assert "finding, internal_score" not in text
+    assert "Recommended action" not in text

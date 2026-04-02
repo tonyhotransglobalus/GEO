@@ -17,10 +17,10 @@ every report implementation detail.
 
 ## Current Source Of Truth
 
-- Stable combined report flow: [.agent/workflows/geo-strategy-report.md](C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.worktrees/geo-report-v2/.agent/workflows/geo-strategy-report.md)
-- Legacy alias to the same stable flow: [.agent/workflows/geo-report-pdf.md](C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.worktrees/geo-report-v2/.agent/workflows/geo-report-pdf.md)
-- Analysis-oriented audit workflow: [.agent/workflows/geo-audit.md](C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.worktrees/geo-report-v2/.agent/workflows/geo-audit.md)
-- Next-generation report preview: [.agent/workflows/geo-strategy-report-v2.md](C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.worktrees/geo-report-v2/.agent/workflows/geo-strategy-report-v2.md)
+- Stable combined report flow: [.agent/workflows/geo-strategy-report.md](/C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.agent/workflows/geo-strategy-report.md)
+- Legacy alias to the same stable flow: [.agent/workflows/geo-report-pdf.md](/C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.agent/workflows/geo-report-pdf.md)
+- Analysis-oriented audit workflow: [.agent/workflows/geo-audit.md](/C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.agent/workflows/geo-audit.md)
+- Next-generation report preview: [.agent/workflows/geo-strategy-report-v2.md](/C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.agent/workflows/geo-strategy-report-v2.md)
 
 ## When To Use Which Flow
 

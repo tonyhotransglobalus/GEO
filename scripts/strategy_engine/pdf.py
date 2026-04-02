@@ -97,7 +97,26 @@ def get_score_color(score):
         return DANGER
 
 
+def _string(val: Any, default: str = "") -> str:
+    if val is None:
+        return default
+    return str(val)
+
+
+def _sequence(val: Any) -> list[Any]:
+    if isinstance(val, (list, tuple)):
+        return list(val)
+    return []
+
+
+def _mapping(val: Any) -> dict[str, Any]:
+    if isinstance(val, Mapping):
+        return dict(val)
+    return {}
+
+
 def get_score_label(score):
+
     """Return label based on score value."""
     if score >= 85:
         return "Excellent"
@@ -424,6 +443,50 @@ def build_styles():
         leading=12,
     ))
 
+    styles.add(ParagraphStyle(
+        name='MetricTileValue',
+        fontName='Helvetica-Bold',
+        fontSize=18,
+        leading=20,
+        textColor=PRIMARY,
+        alignment=TA_LEFT,
+        spaceBefore=0,
+        spaceAfter=2,
+    ))
+
+    styles.add(ParagraphStyle(
+        name='MetricTileLabel',
+        fontName='Helvetica',
+        fontSize=8.5,
+        leading=10,
+        textColor=TEXT_SECONDARY,
+        alignment=TA_LEFT,
+        spaceBefore=0,
+        spaceAfter=0,
+    ))
+
+    styles.add(ParagraphStyle(
+        name='ExecCardTitle',
+        fontName='Helvetica-Bold',
+        fontSize=10,
+        leading=12,
+        textColor=PRIMARY,
+        alignment=TA_LEFT,
+        spaceBefore=0,
+        spaceAfter=4,
+    ))
+
+    styles.add(ParagraphStyle(
+        name='ExecCardBody',
+        fontName='Helvetica',
+        fontSize=9.25,
+        leading=12,
+        textColor=TEXT_PRIMARY,
+        alignment=TA_LEFT,
+        spaceBefore=0,
+        spaceAfter=2,
+    ))
+
     return styles
 
 
@@ -496,8 +559,7 @@ def display_text(value):
         return text
     if "-" in text and " " not in text and text.count("-") >= 2:
         text = text.replace("-", " ").strip().title()
-    if len(text) > 96:
-        text = text[:93].rstrip(" -_,.;:") + "..."
+    # Truncation removed to prevent cutoff issues reported by user.
     return text
 
 
@@ -949,6 +1011,443 @@ def build_finding_card(finding, styles, width):
     return card
 
 
+def build_metric_tiles(items, styles, width):
+    valid_items = [item for item in items if isinstance(item, Mapping)]
+    if not valid_items:
+        return None
+
+    cols = 2 if len(valid_items) > 1 else 1
+    tile_width = int((width - (12 * (cols - 1))) / cols)
+    cells = []
+    for item in valid_items:
+        value = Paragraph(paragraph_text(item.get("value", "")), styles["MetricTileValue"])
+        label = Paragraph(paragraph_text(item.get("label", "")), styles["MetricTileLabel"])
+        tile = Table([[value], [label]], colWidths=[tile_width], hAlign='LEFT')
+        tile.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BG),
+            ("BOX", (0, 0), (-1, -1), 0.75, lightgrey),
+            ("TOPPADDING", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ]))
+        cells.append(tile)
+
+    rows = []
+    for index in range(0, len(cells), cols):
+        row = cells[index:index + cols]
+        while len(row) < cols:
+            row.append("")
+        rows.append(row)
+
+    table = Table(rows, colWidths=[tile_width] * cols, hAlign='LEFT')
+    table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+    ]))
+    return table
+
+
+def build_exec_callout(title, body, styles, width, *, accent_color=ACCENT, subtle=False):
+    title_para = Paragraph(paragraph_text(title), styles["ExecCardTitle"])
+    body_para = Paragraph(paragraph_text(body), styles["ExecCardBody"])
+    card = Table([[title_para], [body_para]], colWidths=[width], hAlign='LEFT')
+    background = WHITE if subtle else LIGHT_BG
+    border = lightgrey if subtle else accent_color
+    line_width = 1 if subtle else 2
+    card.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), background),
+        ("BOX", (0, 0), (-1, -1), 0.75, border),
+        ("LINEBEFORE", (0, 0), (0, -1), line_width, accent_color),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+    ]))
+    return card
+
+
+def build_structured_item_card(item, styles, width):
+    if not isinstance(item, Mapping):
+        return Paragraph(paragraph_text(item), styles["BodyText_Custom"])
+
+    severity = normalize_text(item.get("severity") or item.get("priority")).lower()
+    accent_color = ACCENT
+    if severity in {"critical", "urgent"}:
+        accent_color = DANGER
+    elif severity == "high":
+        accent_color = WARNING
+    elif severity in {"medium", "watch"}:
+        accent_color = INFO
+
+    title = normalize_text(item.get("title") or item.get("label") or item.get("action") or item.get("query") or "Item")
+    rows = [[Paragraph(paragraph_text(title), styles["FindingTitle"])]]
+    for label, key in (
+        ("Severity", "severity"),
+        ("Priority", "priority"),
+        ("What happened", "what_happened"),
+        ("What we found", "plain_english_summary"),
+        ("What it means", "plain_english_definition"),
+        ("What we observed", "what_we_observed"),
+        ("Why it matters", "why_it_matters"),
+        ("Why it matters", "why_it_matters_to_business"),
+        ("What proves it", "proof"),
+        ("Evidence type (evidence class)", "evidence_class"),
+        ("Trust level (confidence)", "confidence"),
+        ("Counterpoint / limitation", "counterpoint_or_limitation"),
+        ("Marketing next step", "marketing_action"),
+        ("Engineering next step", "engineering_action"),
+        ("Measurement", "measurement"),
+        ("Success metric", "success_metric"),
+        ("Expected outcome", "expected_outcome"),
+        ("Business impact", "business_impact"),
+        ("Why now", "why_now"),
+        ("Score", "score"),
+        ("Why this score landed here", "why_this_score_landed_here"),
+        ("What good looks like", "what_good_looks_like"),
+        ("Main evidence used", "primary_evidence_used_text"),
+        ("Weight", "weight_text"),
+        ("Why this weight exists", "weight_explanation"),
+        ("Evidence basis", "evidence_basis"),
+        ("Dependency", "dependency"),
+        ("Effort", "effort"),
+        ("Time horizon", "time_horizon"),
+        ("Evidence", "evidence"),
+        ("Summary", "summary"),
+        ("Affected pages or queries", "affected_pages_or_queries"),
+        ("Affected pages or queries", "affected_pages_or_queries_text"),
+    ):
+        raw_value = item.get(key)
+        if isinstance(raw_value, (list, tuple)):
+            value = ", ".join(
+                normalize_text(part)
+                for part in raw_value
+                if normalize_text(part)
+            )
+        else:
+            value = normalize_text(raw_value)
+        if value:
+            rows.append([make_label_value_paragraph(label, value, styles["FindingDetail"])])
+
+    card = Table(rows, colWidths=[width], hAlign='LEFT', splitByRow=1)
+    card.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BG),
+        ("BOX", (0, 0), (-1, -1), 0.75, lightgrey),
+        ("LINEBEFORE", (0, 0), (0, -1), 3, accent_color),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+    ]))
+    return card
+
+
+def _has_combined_client_contract(client_sections):
+    return isinstance(client_sections, Mapping) and "cover_verdict" in client_sections
+
+
+def _append_plain_bullets(elements, items, styles):
+    for item in items:
+        if isinstance(item, Mapping):
+            text = ", ".join(
+                normalize_text(item.get(key))
+                for key in ("action", "title", "domain", "status", "recommendation")
+                if normalize_text(item.get(key))
+            )
+        else:
+            text = normalize_text(item)
+        if text:
+            elements.append(Paragraph(f"- {paragraph_text(text)}", styles["Recommendation"]))
+
+
+def _render_combined_client_report(elements, client_sections, data, styles, content_width):
+    cover = client_sections.get("cover_verdict", {})
+    verdict_tiles = [
+        {"label": "Verdict", "value": normalize_text(cover.get("verdict_status")).replace("_", " ").title()},
+        {"label": "Trust Level", "value": normalize_text(cover.get("overall_confidence")).title()},
+        {"label": "Evidence Captured", "value": normalize_text(cover.get("sample_completeness")).title()},
+        {"label": "Primary Domain", "value": normalize_text(cover.get("primary_domain"))},
+    ]
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph("Cover + Verdict", styles["ReportTitle"]))
+    elements.append(Paragraph(paragraph_text(cover.get("one_sentence_verdict") or "No verdict available."), styles["ReportSubtitle"]))
+    elements.append(HRFlowable(width="100%", thickness=2, color=ACCENT, spaceAfter=16))
+    tiles = build_metric_tiles(verdict_tiles, styles, content_width)
+    if tiles is not None:
+        elements.append(tiles)
+    verdict_guide = (
+        f"How much to trust this read (confidence): {normalize_text(cover.get('overall_confidence'))}\n"
+        f"How much evidence this run captured (sample completeness): {normalize_text(cover.get('sample_completeness'))}"
+    )
+    elements.append(build_exec_callout("How To Read This Verdict", verdict_guide, styles, content_width, subtle=True))
+    elements.append(Spacer(1, 6))
+    if normalize_text(cover.get("confidence_reason")):
+        elements.append(build_exec_callout("Why This Trust Level Was Assigned", normalize_text(cover.get("confidence_reason")), styles, content_width, subtle=True))
+        elements.append(Spacer(1, 10))
+
+    decision = client_sections.get("decision_summary", {})
+    elements.append(Paragraph("Decision Summary", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    elements.append(
+        build_exec_callout(
+            "Leadership Takeaway",
+            normalize_text(decision.get("leadership_takeaway")) or normalize_text(data.get("executive_summary")),
+            styles,
+            content_width,
+            subtle=True,
+        )
+    )
+    elements.append(Spacer(1, 8))
+    for title, items in (
+        ("What Is Working", decision.get("what_is_working") or []),
+        ("What Is Not Working", decision.get("what_is_not_working") or []),
+    ):
+        elements.append(Paragraph(title, styles["SubHeader"]))
+        _append_plain_bullets(elements, items, styles)
+        elements.append(Spacer(1, 4))
+    for title, items in (
+        ("Top Blockers", decision.get("top_blockers") or []),
+        ("Top Opportunities", decision.get("top_opportunities") or []),
+        ("Top 3 Actions", decision.get("top_3_actions") or []),
+    ):
+        elements.append(Paragraph(title, styles["SubHeader"]))
+        if items:
+            for item in items:
+                elements.append(build_structured_item_card(item, styles, content_width))
+                elements.append(Spacer(1, 6))
+        else:
+            elements.append(Paragraph("No items captured.", styles["BodyText_Custom"]))
+
+    score_definitions = client_sections.get("score_definitions", {})
+    elements.append(Paragraph("What The Scores Mean", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    elements.append(
+        build_exec_callout(
+            "Plain-English First",
+            "Formal GEO terms stay in parentheses so the report still stands up under challenge.",
+            styles,
+            content_width,
+            subtle=True,
+        )
+    )
+    elements.append(Spacer(1, 6))
+    term_guide = score_definitions.get("term_guide") or []
+    if term_guide:
+        elements.append(Paragraph("Term Guide", styles["SubHeader"]))
+        for item in term_guide:
+            if not isinstance(item, Mapping):
+                continue
+            elements.append(
+                Paragraph(
+                    f"- {paragraph_text(item.get('term', ''))}: {paragraph_text(item.get('plain_english', ''))}",
+                    styles["Recommendation"],
+                )
+            )
+        elements.append(Spacer(1, 6))
+    weighting = score_definitions.get("weighting") or {}
+    if isinstance(weighting, Mapping) and (normalize_text(weighting.get("summary")) or weighting.get("components")):
+        elements.append(Paragraph("Scoring And Weighting", styles["SubHeader"]))
+        if normalize_text(weighting.get("summary")):
+            elements.append(Paragraph(paragraph_text(weighting.get("summary")), styles["BodyText_Custom"]))
+            elements.append(Spacer(1, 4))
+        for component in weighting.get("components") or []:
+            if not isinstance(component, Mapping):
+                continue
+            elements.append(
+                build_structured_item_card(
+                    {
+                        "title": component.get("metric_name", ""),
+                        "weight_text": f"{component.get('weight', '')}%",
+                        "weight_explanation": component.get("why_this_weight_exists", ""),
+                    },
+                    styles,
+                    content_width,
+                )
+            )
+            elements.append(Spacer(1, 6))
+    metrics = score_definitions.get("metrics") or []
+    if metrics:
+        for metric in metrics:
+            if not isinstance(metric, Mapping):
+                continue
+            elements.append(
+                build_structured_item_card(
+                    {
+                        "title": metric.get("metric_name", ""),
+                        "score": f"{metric.get('score', '')}/100",
+                        "plain_english_definition": metric.get("plain_english_definition", ""),
+                        "why_this_score_landed_here": metric.get("why_this_score_landed_here", ""),
+                        "what_good_looks_like": metric.get("what_good_looks_like", ""),
+                        "primary_evidence_used_text": ", ".join(metric.get("primary_evidence_used", []) or []),
+                        "confidence": metric.get("confidence", ""),
+                    },
+                    styles,
+                    content_width,
+                )
+            )
+            elements.append(Spacer(1, 8))
+
+    elements.append(Paragraph("Priority Findings", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    priority_findings = client_sections.get("priority_findings", {}).get("items") or []
+    if priority_findings:
+        for item in priority_findings:
+            elements.append(build_structured_item_card(item, styles, content_width))
+            elements.append(Spacer(1, 8))
+    else:
+        elements.append(Paragraph("No priority findings captured.", styles["BodyText_Custom"]))
+
+    benchmark = client_sections.get("competitive_benchmark", {})
+    elements.append(Paragraph("Competitive Benchmark", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    if normalize_text(benchmark.get("summary")):
+        elements.append(Paragraph(paragraph_text(benchmark.get("summary")), styles["BodyText_Custom"]))
+        elements.append(Spacer(1, 6))
+    benchmark_rows = benchmark.get("benchmark_rows") or []
+    if benchmark_rows:
+        rows = [["Competitor", "Platform", "Source Strength", "Our Gap", "Confidence"]]
+        for row in benchmark_rows:
+            if not isinstance(row, Mapping):
+                continue
+            rows.append([
+                row.get("competitor_name", ""),
+                row.get("platform", ""),
+                row.get("source_strength", ""),
+                row.get("our_gap", ""),
+                row.get("confidence", ""),
+            ])
+        elements.append(build_wrapped_table(rows, _fit_widths([100, 95, 90, 170, 57], content_width), styles))
+    else:
+        elements.append(Paragraph("No benchmark rows captured.", styles["BodyText_Custom"]))
+
+    elements.append(Paragraph("Platform Breakdown", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    for platform in client_sections.get("platform_breakdown", {}).get("platforms") or []:
+        if not isinstance(platform, Mapping):
+            continue
+        next_steps = " ".join(normalize_text(item) for item in (platform.get("recommended_actions") or []) if normalize_text(item))
+        elements.append(
+            build_exec_callout(
+                normalize_text(platform.get("platform")),
+                (
+                    f"{normalize_text(platform.get('documented_behavior'))}\n"
+                    f"Observed site status: {normalize_text(platform.get('observed_site_status'))}\n"
+                    f"Visibility read: {normalize_text(platform.get('observed_visibility_status'))}\n"
+                    f"How much to trust this platform read (confidence): {normalize_text(platform.get('confidence'))}\n"
+                    f"Cautious inference: {normalize_text(platform.get('cautious_inference'))}\n"
+                    f"What to do next: {next_steps}"
+                ),
+                styles,
+                content_width,
+                subtle=True,
+            )
+        )
+        elements.append(Spacer(1, 6))
+
+    elements.append(Paragraph("Prompt And Query Proof", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    prompt_query_proof = client_sections.get("prompt_query_proof", {})
+    sampling_note = normalize_text(prompt_query_proof.get("sampling_note"))
+    if sampling_note:
+        elements.append(Paragraph(paragraph_text(sampling_note), styles["BodyText_Custom"]))
+        elements.append(Spacer(1, 6))
+    proof_rows = prompt_query_proof.get("rows") or []
+    if proof_rows:
+        rows = [["Query", "Platform", "Mentioned/Cited", "Winning Domains", "Why"]]
+        for row in proof_rows:
+            if not isinstance(row, Mapping):
+                continue
+            rows.append([
+                row.get("query_or_prompt", ""),
+                row.get("platform", ""),
+                f"{normalize_text(row.get('brand_mentioned'))}/{normalize_text(row.get('brand_cited'))}",
+                ", ".join(row.get("winning_domains", []) or []),
+                row.get("why_we_lost_or_won", ""),
+            ])
+        elements.append(build_wrapped_table(rows, _fit_widths([120, 80, 80, 110, 122], content_width), styles))
+    else:
+        elements.append(Paragraph("No prompt-proof rows captured.", styles["BodyText_Custom"]))
+
+    page_source = client_sections.get("page_source_evidence", {})
+    elements.append(Paragraph("Page And Source Evidence", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    for page in page_source.get("priority_pages") or []:
+        if not isinstance(page, Mapping):
+            continue
+        elements.append(build_structured_item_card(page, styles, content_width))
+        elements.append(Spacer(1, 6))
+    source_rows = page_source.get("source_domains") or []
+    if source_rows:
+        rows = [["Domain", "Type", "Role", "Gap Or Advantage"]]
+        for row in source_rows:
+            if not isinstance(row, Mapping):
+                continue
+            rows.append([
+                row.get("domain", ""),
+                row.get("source_type", ""),
+                row.get("observed_role_in_answers", ""),
+                row.get("gap_or_advantage", ""),
+            ])
+        elements.append(build_wrapped_table(rows, _fit_widths([110, 70, 150, 182], content_width), styles))
+
+    elements.append(Paragraph("30/60/90 Action Plan", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    actions = client_sections.get("action_plan_30_60_90", {}).get("actions") or []
+    if actions:
+        rows = [["Horizon", "Action", "Owner", "Effort", "Expected Outcome", "Confidence"]]
+        for action in actions:
+            if not isinstance(action, Mapping):
+                continue
+            rows.append([
+                action.get("time_horizon", ""),
+                action.get("action", ""),
+                action.get("owner", ""),
+                action.get("effort", ""),
+                action.get("expected_outcome", ""),
+                action.get("confidence", ""),
+            ])
+        elements.append(build_wrapped_table(rows, _fit_widths([65, 130, 70, 55, 140, 52], content_width), styles))
+    else:
+        elements.append(Paragraph("No structured actions captured.", styles["BodyText_Custom"]))
+
+    appendix = client_sections.get("technical_proof_appendix", {})
+    methodology = appendix.get("methodology", {}) if isinstance(appendix, Mapping) else {}
+    elements.append(Paragraph("Technical Proof Appendix", styles["SectionHeader"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+    elements.append(
+        build_exec_callout(
+            "Methodology",
+            normalize_text(methodology.get("summary")) or "No methodology summary captured.",
+            styles,
+            content_width,
+            subtle=True,
+        )
+    )
+    if normalize_text(methodology.get("confidence_note")):
+        elements.append(Spacer(1, 6))
+        elements.append(build_exec_callout("Trust Note (Confidence)", normalize_text(methodology.get("confidence_note")), styles, content_width, subtle=True))
+    if normalize_text(methodology.get("provenance_note")):
+        elements.append(Spacer(1, 6))
+        elements.append(build_exec_callout("Provenance", normalize_text(methodology.get("provenance_note")), styles, content_width, subtle=True))
+    for title, items in (
+        ("Crawl And Fetch Evidence", appendix.get("crawl_and_fetch_evidence") or []),
+        ("Robots And Bot Access", appendix.get("robots_and_bot_access") or []),
+        ("DOM And Heading Proof", appendix.get("dom_and_heading_proof") or []),
+        ("Schema Proof", appendix.get("schema_proof") or []),
+        ("Source Inventory", appendix.get("source_inventory") or []),
+    ):
+        elements.append(Spacer(1, 6))
+        elements.append(Paragraph(title, styles["SubHeader"]))
+        _append_plain_bullets(elements, items, styles)
+    limitations = appendix.get("limitations", {}) if isinstance(appendix, Mapping) else {}
+    if isinstance(limitations, Mapping) and normalize_text(limitations.get("limitations_note")):
+        elements.append(Spacer(1, 6))
+        elements.append(build_exec_callout("Limitations", normalize_text(limitations.get("limitations_note")), styles, content_width, subtle=True))
+
+
 def _client_sections_from_data(data):
     sections = data.get("client_report_sections")
     if isinstance(sections, Mapping) and sections:
@@ -999,6 +1498,9 @@ def _client_sections_from_data(data):
             "confidence": "limited",
             "benchmark_rows": [],
         },
+
+
+
         "roadmap": {
             "thirty_day": [normalize_text(item) for item in data.get("quick_wins", []) if normalize_text(item)],
             "sixty_day": [normalize_text(item) for item in data.get("medium_term", []) if normalize_text(item)],
@@ -1008,10 +1510,28 @@ def _client_sections_from_data(data):
             "summary": "Point-in-time GEO audit based on live crawl, content scoring, and visibility sampling.",
             "confidence_note": "Market data is directional rather than exhaustive in this run.",
         },
+        "platform_guidance": data.get("platform_guidance"),
     }
 
 
 def _append_client_list(elements, items, styles):
+    label_map = {
+        "severity": "Severity",
+        "priority": "Priority",
+        "opportunity_score": "Opportunity Score",
+        "what_happened": "What happened",
+        "why_it_matters": "Why it matters",
+        "proof": "What proves it",
+        "confidence": "Confidence",
+        "marketing_action": "Marketing action",
+        "engineering_action": "Engineering action",
+        "measurement": "Measurement",
+        "business_impact": "Business impact",
+        "evidence": "Evidence",
+        "summary": "Summary",
+        "owner": "Owner",
+        "source": "Source",
+    }
     for index, item in enumerate(items, 1):
         if isinstance(item, Mapping):
             title = normalize_text(
@@ -1025,10 +1545,18 @@ def _append_client_list(elements, items, styles):
                 "severity",
                 "priority",
                 "opportunity_score",
+                "what_happened",
                 "business_impact",
                 "why_it_matters",
+                "proof",
+                "confidence",
+                "marketing_action",
+                "engineering_action",
+                "measurement",
                 "evidence",
                 "summary",
+                "owner",
+                "source",
             ):
                 value = normalize_text(item.get(key))
                 if not value:
@@ -1036,7 +1564,7 @@ def _append_client_list(elements, items, styles):
                 if key == "opportunity_score":
                     details.append(f"Opportunity Score: {value}")
                 else:
-                    details.append(value)
+                    details.append(f"{label_map.get(key, key.title())}: {value}")
             text = f"<b>{index}. {escape(title)}</b>"
             if details:
                 text += "<br/>" + "<br/>".join(paragraph_text(value) for value in details)
@@ -1086,6 +1614,11 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
     content_width = doc.width
     client_sections = _client_sections_from_data(data)
 
+    if _has_combined_client_contract(client_sections):
+        _render_combined_client_report(elements, client_sections, data, styles, content_width)
+        doc.build(elements, onFirstPage=header_footer, onLaterPages=header_footer)
+        return output_path
+
     cover = client_sections.get("cover", {}) if isinstance(client_sections, Mapping) else {}
     elements.append(Spacer(1, 20))
     elements.append(Paragraph(cover.get("title", "GEO Client Brief"), styles["ReportTitle"]))
@@ -1094,36 +1627,44 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
         elements.append(Paragraph(paragraph_text(cover.get("subtitle")), styles["ReportSubtitle"]))
     elements.append(HRFlowable(width="100%", thickness=2, color=ACCENT, spaceAfter=16))
 
-    details_rows = [
-        [
-            Paragraph(paragraph_text("Website"), styles["TableLabelCell"]),
-            Paragraph(paragraph_text(cover.get("website") or data.get("url")), styles["TableCell"]),
-        ],
-        [
-            Paragraph(paragraph_text("Analysis Date"), styles["TableLabelCell"]),
-            Paragraph(paragraph_text(cover.get("analysis_date") or data.get("date")), styles["TableCell"]),
-        ],
+    snapshot_items = cover.get("readiness_snapshot") or []
+    decision_summary = client_sections.get("decision_summary", {}) if isinstance(client_sections, Mapping) else {}
+    hero_left = [
+        Paragraph(paragraph_text("Website"), styles["TableLabelCell"]),
+        Paragraph(paragraph_text(cover.get("website") or data.get("url")), styles["TableCell"]),
+        Spacer(1, 6),
+        Paragraph(paragraph_text("Analysis Date"), styles["TableLabelCell"]),
+        Paragraph(paragraph_text(cover.get("analysis_date") or data.get("date")), styles["TableCell"]),
     ]
-    details_table = Table(details_rows, colWidths=[112, 368], hAlign="LEFT")
-    details_table.setStyle(TableStyle([
+    recommended_decision = normalize_text(decision_summary.get("recommended_decision"))
+    hero_right_card = build_exec_callout(
+        "Recommended Decision",
+        recommended_decision or "No recommendation available.",
+        styles,
+        int(content_width * 0.52),
+    )
+    hero_table = Table(
+        [[hero_left, hero_right_card]],
+        colWidths=_fit_widths([190, 290], content_width),
+        hAlign="LEFT",
+    )
+    hero_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-        ("TOPPADDING", (0, 0), (-1, -1), 10),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("LINEBELOW", (0, 0), (-1, -1), 0.5, lightgrey),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
     ]))
-    elements.append(details_table)
+    elements.append(hero_table)
     elements.append(Spacer(1, 12))
 
-    snapshot_items = cover.get("readiness_snapshot") or []
     if snapshot_items:
-        elements.append(Paragraph("Readiness Snapshot", styles["SubHeader"]))
-        elements.append(_build_snapshot_table(snapshot_items, styles, content_width))
-        elements.append(Spacer(1, 10))
+        metric_tiles = build_metric_tiles(snapshot_items, styles, content_width)
+        if metric_tiles is not None:
+            elements.append(metric_tiles)
+            elements.append(Spacer(1, 4))
 
-    decision_summary = client_sections.get("decision_summary", {}) if isinstance(client_sections, Mapping) else {}
-    elements.append(Paragraph("Decision Summary", styles["SectionHeader"]))
+    elements.append(Paragraph("Executive Summary", styles["SectionHeader"]))
     elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
     elements.append(
         Paragraph(
@@ -1131,6 +1672,44 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
             styles["BodyText_Custom"],
         )
     )
+
+    # Strategic Narrative
+    narrative = client_sections.get("strategic_narrative")
+    if isinstance(narrative, Mapping) and narrative.get("is_assisted"):
+        elements.append(Spacer(1, 6))
+        elements.append(
+            build_exec_callout(
+                _string(narrative.get("title", "Strategic Narrative")),
+                _string(narrative.get("content")),
+                styles,
+                content_width,
+                subtle=True
+            )
+        )
+    recommended_decision = normalize_text(decision_summary.get("recommended_decision"))
+    confidence = normalize_text(decision_summary.get("confidence"))
+    if confidence:
+        elements.append(Spacer(1, 6))
+        elements.append(build_exec_callout("Confidence", confidence.title(), styles, content_width, subtle=True))
+    proof_points = decision_summary.get("proof_points") or []
+    if proof_points:
+        elements.append(Spacer(1, 6))
+        elements.append(Paragraph("Proof Points", styles["SubHeader"]))
+        proof_tile_items = []
+        for index, point in enumerate(proof_points, 1):
+            text = normalize_text(point)
+            if ":" in text:
+                label, value = text.split(":", 1)
+                proof_tile_items.append({"label": label.strip(), "value": value.strip()})
+            else:
+                proof_tile_items.append({"label": f"Proof {index}", "value": text})
+        proof_tiles = build_metric_tiles(
+            proof_tile_items,
+            styles,
+            content_width,
+        )
+        if proof_tiles is not None:
+            elements.append(proof_tiles)
     elements.append(Spacer(1, 12))
 
     risk_section = client_sections.get("priority_risks", {}) if isinstance(client_sections, Mapping) else {}
@@ -1138,7 +1717,9 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
     elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
     risk_items = risk_section.get("items") or []
     if risk_items:
-        _append_client_list(elements, risk_items, styles)
+        for item in risk_items:
+            elements.append(build_structured_item_card(item, styles, content_width))
+            elements.append(Spacer(1, 8))
     else:
         elements.append(Paragraph("No major risks were surfaced in this run.", styles["BodyText_Custom"]))
     elements.append(Spacer(1, 12))
@@ -1148,7 +1729,9 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
     elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
     opportunity_items = opportunity_section.get("items") or []
     if opportunity_items:
-        _append_client_list(elements, opportunity_items, styles)
+        for item in opportunity_items:
+            elements.append(build_structured_item_card(item, styles, content_width))
+            elements.append(Spacer(1, 8))
     else:
         elements.append(Paragraph("No priority opportunities were surfaced in this run.", styles["BodyText_Custom"]))
     elements.append(Spacer(1, 12))
@@ -1193,14 +1776,53 @@ def generate_report(data, output_path="GEO-REPORT.pdf"):
             elements.append(Paragraph("No actions captured.", styles["BodyText_Custom"]))
         elements.append(Spacer(1, 6))
 
+    # Platform Guidance
+    guidance = client_sections.get("platform_guidance")
+    if isinstance(guidance, Mapping):
+        elements.append(Paragraph("2026 Platform Guidance", styles["SectionHeader"]))
+        elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+        elements.append(
+            build_exec_callout(
+                _string(guidance.get("title", "Strategic Rules")),
+                _string(guidance.get("content")),
+                styles,
+                content_width,
+                subtle=True
+            )
+        )
+        sources = _sequence(guidance.get("sources"))
+        if sources:
+            elements.append(Spacer(1, 4))
+            elements.append(Paragraph("Verifiable Sources:", styles["SubHeader"]))
+            for src in sources:
+                label = _string(src.get("label")) if isinstance(src, Mapping) else _string(src)
+                url = _string(src.get("url")) if isinstance(src, Mapping) else ""
+                text = f"• {escape(label)}"
+                if url:
+                    text += f' - <link href="{escape(url)}"><font color="blue"><u>Source</u></font></link>'
+                elements.append(Paragraph(text, styles["BodyText_Custom"]))
+        elements.append(Spacer(1, 12))
+
     methodology = client_sections.get("methodology", {}) if isinstance(client_sections, Mapping) else {}
     elements.append(Paragraph("Methodology and Confidence", styles["SectionHeader"]))
     elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
-    elements.append(Paragraph(paragraph_text(methodology.get("summary")), styles["BodyText_Custom"]))
+    elements.append(build_exec_callout("Methodology", methodology.get("summary"), styles, content_width, subtle=True))
     confidence_note = normalize_text(methodology.get("confidence_note"))
     if confidence_note:
         elements.append(Spacer(1, 6))
-        elements.append(Paragraph(paragraph_text(confidence_note), styles["HighlightBox"]))
+        elements.append(build_exec_callout("Confidence Note", confidence_note, styles, content_width, subtle=True))
+    provenance_note = normalize_text(methodology.get("provenance_note"))
+    if provenance_note:
+        elements.append(Spacer(1, 6))
+        elements.append(build_exec_callout("Provenance", provenance_note, styles, content_width, subtle=True))
+    official_sources = methodology.get("official_sources") or []
+    if official_sources:
+        elements.append(Spacer(1, 6))
+        elements.append(Paragraph("Official Sources", styles["SubHeader"]))
+        rows = [["Source URL"]]
+        for source in official_sources:
+            rows.append([source])
+        elements.append(build_wrapped_table(rows, _fit_widths([content_width], content_width), styles))
 
     doc.build(elements, onFirstPage=header_footer, onLaterPages=header_footer)
     return output_path
@@ -1346,6 +1968,30 @@ def generate_playbook_report(data, output_path="GEO-STRATEGIST-PLAYBOOK.pdf"):
         elements.append(d)
         elements.append(Spacer(1, 5))
 
+
+    # Add Granular Metrics block if available
+    granular_metrics = p4.get("granular_metrics", [])
+    if granular_metrics:
+        elements.append(Spacer(1, 10))
+        elements.append(Paragraph("Granular Analysis Stats", styles['SubHeader']))
+        metric_data = []
+        for i in range(0, len(granular_metrics), 2):
+            row = []
+            for j in range(2):
+                if i + j < len(granular_metrics):
+                    m = granular_metrics[i+j]
+                    row.append(Paragraph(f"<b>{m['label']}:</b> {m['value']}", styles['SmallText']))
+                else:
+                    row.append("")
+            metric_data.append(row)
+        
+        mt = Table(metric_data, colWidths=[250, 250])
+        mt.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ]))
+        elements.append(mt)
+
     elements.append(Spacer(1, 15))
     elements.append(Paragraph("Observed Citation Failures", styles['SubHeader']))
     _append_bullets(elements, p4.get("failures", []), styles)
@@ -1448,10 +2094,19 @@ def generate_playbook_report(data, output_path="GEO-STRATEGIST-PLAYBOOK.pdf"):
     elements.append(Paragraph("Page 9: FAQ by Role", styles['PlaybookPageHeader']))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=PRIMARY, spaceAfter=20))
 
+
+    elements.append(Paragraph(
+        "Different stakeholders require different GEO priorities. Below are the key focus areas by role.",
+        styles['BodyText_Custom']
+    ))
+    elements.append(Spacer(1, 10))
+
     for role, summary in p9.get("role_summaries", {}).items():
-        elements.append(Paragraph(role.replace("_", " ").title(), styles['SubHeader']))
-        elements.append(Paragraph(paragraph_text(summary), styles['BodyText_Custom']))
-        elements.append(Spacer(1, 15))
+        # Role Header with underline
+        elements.append(Paragraph(f"<b>{role.upper()}</b>", styles['SubHeader']))
+        elements.append(HRFlowable(width="30%", thickness=1, color=PRIMARY, spaceAfter=8, horizontalAlignment=0))
+        elements.append(Paragraph(str(summary), styles['BodyText_Custom']))
+        elements.append(Spacer(1, 20))
 
     elements.append(PageBreak())
 

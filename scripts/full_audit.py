@@ -131,6 +131,7 @@ def orchestrate_audit(
     locale: str = "en-us",
     result_limit: int = 5,
     generate_pdf_output: bool = True,
+    presentation_metadata: dict | None = None,
 ) -> dict:
     return run_strategy_report(
         url,
@@ -140,6 +141,7 @@ def orchestrate_audit(
         locale=locale,
         result_limit=result_limit,
         generate_pdf_output=generate_pdf_output,
+        presentation_metadata=presentation_metadata,
     )
 
 

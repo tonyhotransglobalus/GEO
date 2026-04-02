@@ -327,20 +327,27 @@ def _resolve_seed_topics_from_context(context: AnalysisContext) -> list[str]:
         if seed_topics:
             return seed_topics
 
-    candidates = []
+    seeds = []
     for value in (
         context.metadata.get("site_name"),
         context.metadata.get("brand_name"),
     ):
         if value:
-            candidates.append(str(value))
+            seeds.append(str(value))
 
-    candidates.extend(_split_title_phrases(context.site_snapshot.title))
-    if candidates:
-        return _dedupe(candidates)
+    # Additive Discovery: Title + Headings + Description
+    seeds.extend(_split_title_phrases(context.site_snapshot.title))
+    
+    # Include major headings (limit to first 3 to avoid noise)
+    if context.site_snapshot.headings:
+        seeds.extend(context.site_snapshot.headings[:3])
+        
+    # Include meta description if available
+    description = context.site_snapshot.metadata.get("description")
+    if description:
+        seeds.append(description)
 
-    fallback_url = context.site_snapshot.canonical_url or context.site_snapshot.url
-    return _domain_tokens_from_url(fallback_url) or ["site"]
+    return _dedupe(seeds) or ["site"]
 
 
 def _effective_inputs(
@@ -523,21 +530,26 @@ class OpportunityResult:
 
 
 def _derive_seed_topics(context: AnalysisContext) -> list[str]:
-    candidates = [
+    seeds: list[str] = []
+    for value in (
         context.metadata.get("site_name"),
         context.metadata.get("brand_name"),
-        context.site_snapshot.title,
-        context.site_snapshot.canonical_url,
-        context.site_snapshot.url,
-    ]
+    ):
+        if value:
+            seeds.append(_clean_text(value))
 
-    seeds: list[str] = []
-    for candidate in candidates:
-        if not candidate:
-            continue
-        text = _clean_text(candidate)
-        if text:
-            seeds.append(text)
+    # Additive Discovery: Title + Headings + Description
+    if context.site_snapshot.title:
+        seeds.extend(_split_title_phrases(context.site_snapshot.title))
+    
+    # Include major headings
+    if context.site_snapshot.headings:
+        seeds.extend(context.site_snapshot.headings[:3])
+        
+    # Include meta description
+    description = context.site_snapshot.metadata.get("description")
+    if description:
+        seeds.append(description)
 
     return _dedupe(seeds)
 
