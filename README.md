@@ -68,10 +68,7 @@ Open Claude Code and use these commands:
 | `/geo technical <url>` | Technical SEO audit |
 | `/geo content <url>` | Content quality & E-E-A-T assessment |
 | `/geo strategy-report <url>` | Preferred single entrypoint that runs the strategist workflow and generates the final PDF |
-| `/geo report-pdf <url>` | Legacy alias for the strategist report flow |
-| `/geo report <url>` | Legacy markdown-first GEO report flow |
 
----
 
 ## Architecture
 
@@ -88,9 +85,7 @@ geo-seo-claude/
 │   ├── geo-platform-optimizer/   # Platform-specific AI search optimization
 │   ├── geo-schema/               # Structured data for AI discoverability
 │   ├── geo-technical/            # Technical SEO foundations
-│   ├── geo-content/              # Content quality & E-E-A-T
-│   ├── geo-report/               # Client-ready markdown report generation
-│   └── geo-report-pdf/           # Legacy alias for the strategist PDF flow
+│   └── geo-content/              # Content quality & E-E-A-T
 ├── agents/                       # 5 parallel subagents
 │   ├── geo-ai-visibility.md      # GEO audit, citability, crawlers, brands
 │   ├── geo-platform-analysis.md  # Platform-specific optimization
@@ -102,9 +97,10 @@ geo-seo-claude/
 │   ├── citability_scorer.py      # AI citability scoring engine
 │   ├── brand_scanner.py          # Brand mention detection
 │   ├── llmstxt_generator.py      # llms.txt validation & generation
-│   ├── strategy_report.py        # Single public strategist entrypoint
-│   ├── full_audit.py             # Shared audit orchestrator used by the strategist entrypoint
-│   └── generate_pdf_report.py    # PDF report generator (ReportLab)
+│   ├── strategy_report.py        # Stable strategist entrypoint
+│   ├── strategy_report_v2.py     # Next-gen action-driven strategist entrypoint
+│   ├── strategy_engine/          # V1 Strategy extraction & plugin framework
+│   └── strategy_engine_v2/       # V2 Adjudication & Evidence reporting framework
 ├── schema/                       # JSON-LD templates
 │   ├── organization.json         # Organization schema (with sameAs)
 │   ├── local-business.json       # LocalBusiness schema

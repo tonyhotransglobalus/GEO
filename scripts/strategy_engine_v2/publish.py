@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
+from .comparison import normalize_comparison_run
 from .markdown import MARKDOWN_FILENAME, render_v2_markdown_report
 from .pdf import generate_v2_pdf_report
 
@@ -162,9 +163,18 @@ def _comparison_metadata(payload: Mapping[str, Any]) -> dict[str, Any]:
     adjudication = _coerce_mapping(payload.get("adjudication"))
     qa = _coerce_mapping(payload.get("qa"))
     comparison = _coerce_mapping(manifest.get("comparison_eligibility"))
+    normalized_run = normalize_comparison_run(payload)
     return {
         "target_url": manifest.get("target_url"),
         "target_domain": manifest.get("target_domain"),
+        "locale": manifest.get("locale"),
+        "platforms": list(normalized_run.get("platforms") or []),
+        "competitors": list(normalized_run.get("competitors") or []),
+        "query_set": list(normalized_run.get("query_set") or []),
+        "geo_score": normalized_run.get("geo_score"),
+        "citation_count": normalized_run.get("citation_count"),
+        "referral_visits": normalized_run.get("referral_visits"),
+        "authority_gap_count": normalized_run.get("authority_gap_count"),
         "shadow_run": bool(manifest.get("shadow_run")),
         "compare_to_v1": bool(comparison.get("requested")),
         "comparison_eligible": bool(comparison.get("eligible")),

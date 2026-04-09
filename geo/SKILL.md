@@ -15,19 +15,11 @@ This file is the top-level index for GEO work in this repo.
 Use it to decide which workflow to run, not as the detailed source of truth for
 every report implementation detail.
 
-## Current Source Of Truth
-
-- Stable combined report flow: [.agent/workflows/geo-strategy-report.md](/C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.agent/workflows/geo-strategy-report.md)
-- Legacy alias to the same stable flow: [.agent/workflows/geo-report-pdf.md](/C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.agent/workflows/geo-report-pdf.md)
-- Analysis-oriented audit workflow: [.agent/workflows/geo-audit.md](/C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.agent/workflows/geo-audit.md)
-- Next-generation report preview: [.agent/workflows/geo-strategy-report-v2.md](/C:/Users/TonyHo(dauscaDB)/OneDrive%20-%20TransGlobal%20US/Desktop/geo-seo/.agent/workflows/geo-strategy-report-v2.md)
-
 ## When To Use Which Flow
 
 | Need | Workflow |
 |---|---|
 | Final client-ready report on the stable path | `geo-strategy-report` |
-| Old alias for the same stable report path | `geo-report-pdf` |
 | Analysis-first audit run | `geo-audit` |
 | Test the next-generation report pipeline | `geo-strategy-report-v2` |
 
@@ -43,7 +35,6 @@ every report implementation detail.
 | `/geo technical <url>` | Review technical SEO foundations |
 | `/geo content <url>` | Review content quality and E-E-A-T signals |
 | `/geo strategy-report <url>` | Run the stable combined report flow |
-| `/geo report-pdf <url>` | Legacy alias for the same stable flow |
 | `/geo quick <url>` | Fast GEO visibility snapshot |
 
 ## V1 And V2

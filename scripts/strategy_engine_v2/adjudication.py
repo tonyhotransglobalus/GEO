@@ -119,6 +119,23 @@ def _build_result(status: str, reason: str, warning: str) -> dict:
     }
 
 
+def _status_points(status: Any) -> int:
+    normalized = _string(status).lower()
+    if normalized == "decision-grade":
+        return 2
+    if normalized == "directional":
+        return 1
+    return 0
+
+
+def _completeness_label(score: int) -> str:
+    if score >= 75:
+        return "High"
+    if score >= 40:
+        return "Medium"
+    return "Low"
+
+
 def _audit_data_inputs(
     *,
     manifest: dict[str, Any],
@@ -441,6 +458,53 @@ def classify_change_since_last_run_section(
     )
 
 
+def classify_evidence_completeness_section(
+    *,
+    benchmark_status: str,
+    prompt_proof_status: str,
+    platform_breakdown_status: str,
+    change_status: str,
+    comparison_requested: bool,
+) -> dict:
+    component_statuses = [
+        ("benchmark", benchmark_status),
+        ("prompt proof", prompt_proof_status),
+        ("platform breakdown", platform_breakdown_status),
+    ]
+    if comparison_requested:
+        component_statuses.append(("change comparison", change_status))
+
+    possible_points = max(len(component_statuses) * 2, 1)
+    earned_points = sum(_status_points(status) for _, status in component_statuses)
+    score = round((earned_points / possible_points) * 100)
+    label = _completeness_label(score)
+
+    partial_components = [
+        name for name, status in component_statuses if _string(status).lower() == "directional"
+    ]
+    missing_components = [
+        name for name, status in component_statuses if _string(status).lower() == "omitted"
+    ]
+
+    if label == "High":
+        reason = "This run captured enough benchmark, prompt-proof, and platform evidence to support most topline claims."
+    elif label == "Medium":
+        reason = "This run captured some direct evidence, but important proof layers are still partial."
+    else:
+        reason = "This run is still missing key benchmark, prompt-proof, or platform captures, so leadership claims stay conservative."
+
+    if comparison_requested and "change comparison" in partial_components + missing_components:
+        reason += " Comparison evidence is still limited in this run."
+
+    return {
+        "score": score,
+        "label": label,
+        "reason": reason,
+        "partial_components": partial_components,
+        "missing_components": missing_components,
+    }
+
+
 def adjudicate_v2_sections(
     *,
     manifest: dict[str, Any],
@@ -467,10 +531,18 @@ def adjudicate_v2_sections(
     change_since_last_run = classify_change_since_last_run_section(
         **inputs["change_since_last_run"],
     )
+    evidence_completeness = classify_evidence_completeness_section(
+        benchmark_status=benchmark.get("status", "omitted"),
+        prompt_proof_status=prompt_proof.get("status", "omitted"),
+        platform_breakdown_status=platform_breakdown.get("status", "omitted"),
+        change_status=change_since_last_run.get("status", "omitted"),
+        comparison_requested=bool(inputs["change_since_last_run"].get("compare_to_v1")),
+    )
 
     return {
         "benchmark": benchmark,
         "prompt_proof": prompt_proof,
         "platform_breakdown": platform_breakdown,
         "change_since_last_run": change_since_last_run,
+        "evidence_completeness": evidence_completeness,
     }

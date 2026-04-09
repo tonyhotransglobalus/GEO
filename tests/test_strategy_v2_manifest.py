@@ -75,6 +75,7 @@ def test_run_strategy_report_v2_uses_manifest_as_authoritative_state(tmp_path):
     assert set(result["adjudication"]) == {
         "benchmark",
         "change_since_last_run",
+        "evidence_completeness",
         "platform_breakdown",
         "prompt_proof",
     }

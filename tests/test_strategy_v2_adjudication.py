@@ -2,6 +2,7 @@ from scripts.strategy_engine_v2.adjudication import (
     build_adjudication_inputs,
     classify_benchmark_section,
     classify_change_since_last_run_section,
+    classify_evidence_completeness_section,
     classify_platform_breakdown_section,
     classify_prompt_proof_section,
 )
@@ -61,6 +62,21 @@ def test_change_since_last_run_with_stable_comparable_baseline_is_decision_grade
     assert "no material change points were detected" in result["reason"].lower()
 
 
+def test_evidence_completeness_treats_unrequested_comparison_as_neutral():
+    result = classify_evidence_completeness_section(
+        benchmark_status="directional",
+        prompt_proof_status="omitted",
+        platform_breakdown_status="decision-grade",
+        change_status="omitted",
+        comparison_requested=False,
+    )
+
+    assert result["score"] == 50
+    assert result["label"] == "Medium"
+    assert result["reason"]
+    assert "comparison" not in result["reason"].lower()
+
+
 def test_v2_workflow_includes_adjudication(tmp_path):
     result = run_strategy_report_v2(
         "https://www.transglobalus.com/",
@@ -69,6 +85,7 @@ def test_v2_workflow_includes_adjudication(tmp_path):
     )
 
     assert "adjudication" in result
+    assert "evidence_completeness" in result["adjudication"]
 
 
 def test_build_adjudication_inputs_keeps_placeholder_signals_conservative():

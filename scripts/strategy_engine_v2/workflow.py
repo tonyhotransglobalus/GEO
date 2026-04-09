@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import requests
 
 from .adjudication import adjudicate_v2_sections
+from .comparison import compare_runs, normalize_comparison_run
 from .evidence import build_v2_evidence_ledger
 from .manifest import build_run_manifest
 from .publish import publish_v2_artifacts
@@ -289,14 +290,23 @@ def _load_previous_comparison_context(
     manifest: dict[str, Any],
     evidence: dict[str, Any],
     reports_dir: Path | None,
+    audit_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     comparison = _mapping(manifest.get("comparison_eligibility"))
     current_snapshot = _comparison_snapshot(manifest=manifest, evidence=evidence)
+    current_run = normalize_comparison_run(
+        {
+            "manifest": manifest,
+            "evidence": evidence,
+            "audit_data": audit_data,
+        }
+    )
     if not comparison.get("requested") or not comparison.get("eligible"):
         return {
             "current_snapshot": current_snapshot,
             "previous_snapshot": {},
             "change_points": 0,
+            "delta_summary": compare_runs(current_run, {}),
         }
 
     search_root = reports_dir or Path(__file__).resolve().parents[2] / "output" / "reports-v2"
@@ -305,10 +315,11 @@ def _load_previous_comparison_context(
             "current_snapshot": current_snapshot,
             "previous_snapshot": {},
             "change_points": 0,
+            "delta_summary": compare_runs(current_run, {}),
         }
 
     current_timestamp = _parse_timestamp(manifest.get("run_timestamp"))
-    candidates: list[tuple[datetime, dict[str, Any], dict[str, Any]]] = []
+    candidates: list[tuple[datetime, dict[str, Any], dict[str, Any], dict[str, Any]]] = []
     for manifest_path in search_root.rglob("GEO-STRATEGY-REPORT-V2.manifest.json"):
         try:
             candidate_manifest = _load_json(manifest_path)
@@ -328,16 +339,24 @@ def _load_previous_comparison_context(
             candidate_evidence = _load_json(evidence_path)
         except Exception:
             continue
-        candidates.append((candidate_timestamp, candidate_manifest, candidate_evidence))
+        comparison_metadata_path = manifest_path.with_name("GEO-STRATEGY-REPORT-V2.comparison-metadata.json")
+        candidate_metadata = {}
+        if comparison_metadata_path.exists():
+            try:
+                candidate_metadata = _load_json(comparison_metadata_path)
+            except Exception:
+                candidate_metadata = {}
+        candidates.append((candidate_timestamp, candidate_manifest, candidate_evidence, candidate_metadata))
 
     if not candidates:
         return {
             "current_snapshot": current_snapshot,
             "previous_snapshot": {},
             "change_points": 0,
+            "delta_summary": compare_runs(current_run, {}),
         }
 
-    _, previous_manifest, previous_evidence = sorted(
+    _, previous_manifest, previous_evidence, previous_metadata = sorted(
         candidates,
         key=lambda item: item[0],
         reverse=True,
@@ -346,11 +365,19 @@ def _load_previous_comparison_context(
         manifest=previous_manifest,
         evidence=previous_evidence,
     )
+    previous_run = normalize_comparison_run(
+        {
+            "manifest": previous_manifest,
+            "evidence": previous_evidence,
+            "comparison_metadata": previous_metadata,
+        }
+    )
     return {
         "previous_manifest": previous_manifest,
         "previous_snapshot": previous_snapshot,
         "current_snapshot": current_snapshot,
         "change_points": _count_snapshot_changes(current_snapshot, previous_snapshot),
+        "delta_summary": compare_runs(current_run, previous_run),
     }
 
 
@@ -388,6 +415,8 @@ def run_strategy_report_v2(
     mode: str = "script-only",
     driver: str = "script",
     model: str | None = None,
+    measurement_data: dict[str, Any] | None = None,
+    business_profile: str | None = None,
     non_interactive: bool = False,
     reports_dir: Path | None = None,
     deps: StrategyV2WorkflowDependencies | None = None,
@@ -412,6 +441,12 @@ def run_strategy_report_v2(
         seed_topics=list(manifest.get("seed_topics") or []),
         locale=locale,
     )
+    if measurement_data is not None:
+        audit_data = dict(audit_data)
+        audit_data["measurement_data"] = dict(measurement_data)
+    if business_profile is not None:
+        audit_data = dict(audit_data)
+        audit_data["business_profile"] = business_profile
     evidence = deps.build_v2_evidence_ledger(
         manifest=manifest,
         audit_data=audit_data,
@@ -420,6 +455,7 @@ def run_strategy_report_v2(
         manifest=manifest,
         evidence=evidence,
         reports_dir=reports_dir,
+        audit_data=audit_data,
     )
     adjudication = deps.adjudicate_v2_sections(
         manifest=manifest,
